@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "TASK-3",
+  "title": "카드 문서 화면 (Canvas 호환)",
+  "description": "카드를 누르면 전체 화면 문서가 열리고, 카드의 canvas.tsx를 cursor/canvas 호환 컴포넌트로 렌더링한다.",
+  "status": "in_progress",
+  "statusVersion": 1,
+  "order": 2,
+  "agents": { "implementer": { "tool": "claude" } },
+  "relatedDocs": [],
+  "dependsOn": ["TASK-2"],
+  "createdAt": "2026-10-20T06:03:16.000Z",
+  "updatedAt": "2026-10-20T06:03:16.000Z"
+}

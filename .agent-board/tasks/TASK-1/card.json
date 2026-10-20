@@ -1,0 +1,24 @@
+{
+  "agents": {
+    "implementer": {
+      "tool": "claude"
+    },
+    "reviewer": {
+      "tool": "codex"
+    }
+  },
+  "relatedDocs": [],
+  "statusVersion": 0,
+  "order": 1,
+  "createdAt": "2026-10-20T03:26:24.581Z",
+  "updatedAt": "2026-10-20T03:26:47.116Z",
+  "schemaVersion": 1,
+  "id": "TASK-1",
+  "title": "Agent board 파악하기",
+  "status": "todo",
+  "autoReview": true,
+  "workspace": {
+    "branch": "task/TASK-1",
+    "worktree": "../AI_kanvan-worktrees/TASK-1"
+  }
+}

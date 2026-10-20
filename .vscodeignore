@@ -1,0 +1,7 @@
+**
+!dist/**
+!docs/canvas-guide.md
+!package.json
+!package.nls*.json
+!README.md
+!LICENSE

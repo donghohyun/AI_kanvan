@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "TASK-2",
+  "title": "보드 디자인 개편",
+  "status": "todo",
+  "statusVersion": 0,
+  "order": 2,
+  "agents": {
+    "implementer": {
+      "tool": "claude"
+    }
+  },
+  "relatedDocs": [],
+  "createdAt": "2026-10-20T05:16:07.489Z",
+  "updatedAt": "2026-10-20T05:17:11.861Z",
+  "description": "참고 시안의 대시보드형 디자인(요약 지표, 구분별 진척, 필터, 카드 디자인)을 보드에 적용한다."
+}

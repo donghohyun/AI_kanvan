@@ -1,0 +1,11 @@
+{
+  "command.open": "보드 열기",
+  "command.createCard": "카드 만들기",
+  "command.renumberCard": "카드 ID 변경",
+  "command.installHooks": "에이전트 세션 Hook 설치",
+  "command.detectTools": "에이전트 CLI 다시 찾기",
+  "config.toolPaths": "PATH에 없는 에이전트 CLI 경로 (claude, codex, cursor).",
+  "config.autoCreateCards": "카드에 연결되지 않은 에이전트 세션의 첫 요청으로 카드를 만들거나 기존 카드를 갱신합니다 (Hook 필요).",
+  "config.matcherTool": "요청이 어느 카드에 속하는지 판단할 CLI. auto: Claude Code → Codex → Cursor 순. none: 키워드 비교만 사용.",
+  "command.openSettings": "설정 열기"
+}

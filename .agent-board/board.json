@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "sharedDocs": [
+    {
+      "id": "doc-1",
+      "name": "API 명세서",
+      "category": "api",
+      "path": "docs/api.canvas.tsx"
+    }
+  ],
+  "settings": {
+    "maxReviewIterations": 3,
+    "stopTimeoutSec": 10,
+    "defaultAutoReview": false
+  },
+  "categories": [
+    {
+      "tag": "BE",
+      "name": "BE",
+      "color": "blue"
+    },
+    {
+      "tag": "FE",
+      "name": "FE",
+      "color": "purple"
+    },
+    {
+      "tag": "Infra",
+      "name": "Infra",
+      "color": "mauve"
+    },
+    {
+      "tag": "ML",
+      "name": "ML",
+      "color": "orange"
+    }
+  ],
+  "enabledTools": [
+    "claude",
+    "codex",
+    "cursor"
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "name": "agent-board",
+  "displayName": "Agent Board",
+  "description": "Kanban board for agent tasks: specs, progress, runs and reviews per card.",
+  "version": "0.0.1",
+  "publisher": "agent-board",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:.agent-board"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentBoard.open",
+        "title": "%command.open%",
+        "category": "Agent Board"
+      },
+      {
+        "command": "agentBoard.createCard",
+        "title": "%command.createCard%",
+        "category": "Agent Board"
+      },
+      {
+        "command": "agentBoard.renumberCard",
+        "title": "%command.renumberCard%",
+        "category": "Agent Board"
+      },
+      {
+        "command": "agentBoard.installHooks",
+        "title": "%command.installHooks%",
+        "category": "Agent Board"
+      },
+      {
+        "command": "agentBoard.detectTools",
+        "title": "%command.detectTools%",
+        "category": "Agent Board"
+      },
+      {
+        "command": "agentBoard.openSettings",
+        "title": "%command.openSettings%",
+        "category": "Agent Board"
+      }
+    ],
+    "configuration": {
+      "title": "Agent Board",
+      "properties": {
+        "agentBoard.toolPaths": {
+          "type": "object",
+          "default": {},
+          "description": "%config.toolPaths%",
+          "properties": {
+            "claude": {
+              "type": "string"
+            },
+            "codex": {
+              "type": "string"
+            },
+            "cursor": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "agentBoard.autoCreateCards": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.autoCreateCards%"
+        },
+        "agentBoard.matcherTool": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "claude",
+            "codex",
+            "cursor",
+            "none"
+          ],
+          "default": "auto",
+          "description": "%config.matcherTool%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/webview",
+    "lint": "eslint src test",
+    "test": "vitest run",
+    "package": "npm run build -- --production && vsce package --no-dependencies --allow-missing-repository --skip-license --no-rewrite-relative-links",
+    "test:smoke": "npm run build && vitest run --config vitest.smoke.config.mts",
+    "test:integration": "npm run build && node test/integration/runTest.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/vscode": "~1.90.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.28.0",
+    "eslint": "^9.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.0.0"
+  },
+  "dependencies": {
+    "sucrase": "^3.35.1"
+  }
+}

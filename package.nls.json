@@ -1,0 +1,11 @@
+{
+  "command.open": "Open Board",
+  "command.createCard": "Create Card",
+  "command.renumberCard": "Change Card ID",
+  "command.installHooks": "Install Hooks for Agent Sessions",
+  "command.detectTools": "Detect Agent CLIs",
+  "config.toolPaths": "Paths to agent CLIs when they are not on PATH (claude, codex, cursor).",
+  "config.autoCreateCards": "Create or update a card from the first request of an agent session that is not linked to a card (requires hooks).",
+  "config.matcherTool": "CLI used to decide which card a request belongs to. auto: Claude Code, then Codex, then Cursor. none: keyword matching only.",
+  "command.openSettings": "Open Settings"
+}
