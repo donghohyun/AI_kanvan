@@ -21,7 +21,7 @@ Cursor·VS Code 안에서 에이전트 작업을 카드 단위로 관리하는 �
 
    **자동 수정·재리뷰**를 켜면 리뷰 지적 사항을 구현자에게 넘기고 다시 리뷰합니다(기본 최대 3회).
 
-**카드 문서**: 카드를 누르면 전체 화면 카드 화면이 열리고, 모든 카드가 canvas 스타일 문서로 보입니다. 카드 폴더에 `canvas.tsx`가 있으면 그것을, 없으면 intent·spec·plan으로 만든 기본 문서를 그립니다. 칸반 아래의 공용 문서 표는 문서·일자(마지막 커밋일)·브랜치·구분을 보여 주고, `.canvas.tsx`·`.md` 문서는 보드 안에서 같은 스타일로 열립니다. 구분은 문서 행의 `⋯`에서 지정합니다. API 명세서는 [docs/api.canvas.tsx](docs/api.canvas.tsx)입니다. Cursor canvas와 같은 형식(`import … from "cursor/canvas"`)이라 Cursor·Claude Code·Codex 어느 에이전트든 쓸 수 있습니다. 다이어그램이 들어간 맞춤 문서가 필요하면 **에이전트에게 맞춤 문서 요청**을 누르세요. 에이전트는 [docs/canvas-guide.md](docs/canvas-guide.md)를 읽고 문서를 씁니다.
+**카드 문서**: 카드를 누르면 전체 화면 카드 화면이 열리고, 모든 카드가 canvas 스타일 문서로 보입니다. 글은 intent·spec·plan(Markdown)이고, 다이어그램·차트는 카드 폴더의 `canvas.tsx`에 컴포넌트로 두고 md에 ```` ```canvas 이름 ```` 블록으로 넣습니다. 문서는 워드처럼 글을 눌러 바로 고치고(Enter는 새 문단·새 항목), 그림 안의 글자는 두 번 눌러 고칩니다. 고친 글에서 벗어나면 원문 파일의 해당 줄만 저장됩니다. **코드 편집**은 그림 코드를 보드 옆 칸에 엽니다. 칸반 아래의 공용 문서 표는 문서·일자(마지막 커밋일)·브랜치·구분을 보여 주고, `.canvas.tsx`·`.md` 문서는 보드 안에서 같은 스타일로 열립니다. 구분은 문서 행의 `⋯`에서 지정합니다. API 명세서처럼 같은 구조가 반복되는 참조 문서는 페이지 전체를 컴포넌트로 쓴 `.canvas.tsx`입니다([docs/api.canvas.tsx](docs/api.canvas.tsx), 접점마다 Request/Response). 그림 코드는 Cursor canvas와 같은 형식(`import … from "cursor/canvas"`)이라 Cursor·Claude Code·Codex 어느 에이전트든 쓸 수 있습니다. **에이전트에게 그림 요청**을 누르면 에이전트가 [docs/canvas-guide.md](docs/canvas-guide.md)를 읽고 그림을 넣습니다.
 
 **구분과 일정**: plan.md 절 제목을 `## [BE] 로그인 API`처럼 쓰면 그 아래 항목이 BE로 집계되어 보드 위쪽의 구분별 진척과 카드 태그에 나타납니다. 구분은 설정 화면에서 추가합니다. 카드 상세의 개요 탭에서 시작일·마감일·선행 카드를 지정하면, 마감일을 넘긴 카드에 D+N이 표시됩니다.
 

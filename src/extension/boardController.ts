@@ -26,7 +26,7 @@ import { pathExists, writeFileAtomic } from '../storage/fsutil';
 import { BOARD_DIR, BoardRepository, type BoardSnapshot } from '../storage/repository';
 import { translate, type Locale, type MessageKey } from '../shared/i18n';
 import type { BoardState, CardPatch, CardView, MachineSettings, ToExtension, ToWebview } from '../shared/protocol';
-import type { CanvasController } from './canvasController';
+import { figuresFileFor, sharedDocKind, type CanvasController } from './canvasController';
 import { NO_RUNS, type RunsBridge } from './runsBridge';
 import { renderWebviewHtml } from './webviewHtml';
 
@@ -626,8 +626,12 @@ export class BoardController implements BoardAccess, vscode.Disposable {
 
   private refreshSharedDocWatchers(): void {
     this.sharedDocWatchers.forEach((d) => d.dispose());
-    this.sharedDocWatchers = (this.snapshot?.board.sharedDocs ?? []).map((doc) => {
-      const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.repo.root, doc.path));
+    // Markdown 공용 문서는 옆의 그림 파일(`.canvas.tsx`)도 지켜본다.
+    const paths = (this.snapshot?.board.sharedDocs ?? []).flatMap((doc) =>
+      sharedDocKind(doc.path) === 'markdown' ? [doc.path, figuresFileFor(doc.path)] : [doc.path],
+    );
+    this.sharedDocWatchers = paths.map((rel) => {
+      const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.repo.root, rel));
       w.onDidCreate(() => this.scheduleReload());
       w.onDidDelete(() => this.scheduleReload());
       // 보드 안에서 보고 있는 공용 문서가 바뀌면 다시 그린다 (TASK-3).

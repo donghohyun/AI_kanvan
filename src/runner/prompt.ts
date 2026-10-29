@@ -63,16 +63,20 @@ End your reply with exactly one fenced JSON block in this format:
 Use "pass" with an empty findings list when no changes are needed.`;
 }
 
-/** TASK-3 CA-2: 카드 문서(canvas) 만들기 */
+/** TASK-3 CA-2: 카드 문서의 그림 만들기. 글은 intent·spec·plan.md에 있고, 그림만 canvas.tsx에 둔다. */
 export function canvasPrompt(card: Card, docs: PromptDocs, canvasPath: string, guidePath: string): string {
-  return `You are writing the document (canvas) for this task, managed by Agent Board.
+  return `You are adding figures to this task's document, managed by Agent Board.
 
 ${docList(card, docs)}
 
 First read the canvas guide: ${guidePath}
-Then write exactly one file: ${canvasPath}
-The canvas presents this task to the team: what it is for and its current state, the key decisions or boundaries, the requirement groups, progress by category, and a diagram when a flow or dependency is easier to see as boxes and arrows.
-Follow the guide's file rules and design rules. Do not modify any other file. Reply with one sentence when done.`;
+The document's text is intent.md, spec.md and plan.md. Keep the text there; do not copy it into code.
+Add figures only where a picture says it better than text: a flow or dependency as boxes and arrows, a chart, a comparison at a glance.
+1. Write the figures as named exports (no default export) in exactly one file: ${canvasPath}
+2. In the md files above, put a block where each figure belongs:
+\`\`\`canvas FigureName
+\`\`\`
+Do not modify any other file. Reply with one sentence when done.`;
 }
 
 /** TASK-3 CA-3: 렌더링에 실패한 canvas 고치기 */

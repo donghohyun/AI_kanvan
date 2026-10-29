@@ -55,7 +55,8 @@ function canvasModule(): Record<string, unknown> {
   };
 }
 
-export function loadCanvas(code: string): ComponentType {
+/** 변환된 canvas 코드를 실행해 export를 돌려준다. */
+export function loadCanvasModule(code: string): Record<string, unknown> {
   const module = { exports: {} as Record<string, unknown> };
   const require = (name: string): unknown => {
     if (name === 'cursor/canvas') return canvasModule();
@@ -65,12 +66,23 @@ export function loadCanvas(code: string): ComponentType {
   };
   // 확장 프로그램이 변환한 코드를 실행한다. 웹뷰는 파일·네트워크 접근이 막힌 격리 환경이다.
   new Function('require', 'module', 'exports', code)(require, module, module.exports);
-  const component = module.exports.default;
+  return module.exports;
+}
+
+export function loadCanvas(code: string): ComponentType {
+  const component = loadCanvasModule(code).default;
   if (typeof component !== 'function') throw new Error('canvas.tsx must default-export a React component.');
   return component as ComponentType;
 }
 
-class Boundary extends Component<{ onError: (message: string) => void; fallback: (message: string) => ReactNode; children: ReactNode }, { error?: string }> {
+/** md 문서에 끼워 넣을 그림: 이름이 대문자로 시작하는 함수 export */
+export function loadFigures(code: string): Record<string, ComponentType> {
+  const out: Record<string, ComponentType> = {};
+  for (const [name, value] of Object.entries(loadCanvasModule(code))) if (/^[A-Z]/.test(name) && typeof value === 'function') out[name] = value as ComponentType;
+  return out;
+}
+
+export class Boundary extends Component<{ onError: (message: string) => void; fallback: (message: string) => ReactNode; children: ReactNode }, { error?: string }> {
   state: { error?: string } = {};
   static getDerivedStateFromError(error: Error) {
     return { error: error.message || String(error) };
