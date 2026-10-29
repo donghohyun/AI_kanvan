@@ -246,6 +246,6 @@ Task documents:
 - spec: ${paths.spec}
 - plan: ${paths.plan}
 Read them before continuing. When you fully finish a checklist item in plan.md, change "- [ ]" to "- [x]". Do not check items you did not finish.${
-    canvas ? `\nThe card's document is ${canvas.path} (a cursor/canvas file). If you create or update it, follow ${canvas.guide}.` : ''
+    canvas ? `\nThe card's figures (diagrams, charts) go in ${canvas.path} and are placed into the md files with \`\`\`canvas Name\`\`\` blocks. If you add or change figures, follow ${canvas.guide}.` : ''
   }`;
 }

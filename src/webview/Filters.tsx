@@ -1,13 +1,25 @@
 import type { BoardState } from '../shared/protocol';
-import { daysAgo, type BoardFilter } from './cards';
+import { daysAgo, needsAttention, placedCards, type BoardFilter } from './cards';
+import { BellIcon } from './icons';
 import { useT } from './vscode';
 
 /** TASK-2 DS-3, DS-4: 구분 칩과 Done 열 완료 시작일 */
 export function Filters({ state, filter, onChange }: { state: BoardState; filter: BoardFilter; onChange: (f: BoardFilter) => void }) {
   const t = useT();
   const categories = state.board?.categories ?? [];
+  const attention = placedCards(state).filter(needsAttention).length;
   return (
     <div className="filters">
+      {(attention > 0 || filter.attention) && (
+        <button
+          className={`chip attention${filter.attention ? ' active' : ''}`}
+          aria-pressed={!!filter.attention}
+          onClick={() => onChange({ ...filter, attention: !filter.attention || undefined })}
+        >
+          <BellIcon />
+          {t('filter.attention', { n: attention })}
+        </button>
+      )}
       <div className="chips" role="radiogroup" aria-label={t('filter.categories')}>
         <button
           role="radio"

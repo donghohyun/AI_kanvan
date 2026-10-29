@@ -1,11 +1,15 @@
 import { completedAt, localDate, overdueDays } from '../core/board';
 import { formatProgress } from '../core/checklist';
+import { TASK_DOCS } from '../core/types';
 import type { BoardState, CardView } from '../shared/protocol';
 import { categoriesOf, placedCards, shortDate } from './cards';
-import { renderBlock } from './canvas/markdown';
-import { documentBlocks } from './canvas/markdownParse';
-import { Callout, Grid, H1, H2, Stack, Stat, Text } from './canvas/ui';
-import { useT } from './vscode';
+import { Callout, Grid, H2, Stack, Stat, Text } from './canvas/ui';
+import { useHostTheme } from './canvas/host';
+import { canvasTypography } from './canvas/theme';
+import { EditableField, EditableMarkdown } from './DocEditing';
+import { send, useT } from './vscode';
+
+const DOC_OPTIONS = { skipTitle: true, demote: 1 };
 
 export interface CardDocs {
   intent?: string;
@@ -14,11 +18,12 @@ export interface CardDocs {
 }
 
 /**
- * canvas.tsx가 없는 카드의 기본 문서. 카드 데이터와 intent·spec·plan으로 canvas 스타일 문서를 만든다.
- * canvas 컴포넌트를 쓰므로 CanvasFrame 안에서 그린다.
+ * 카드 문서. 카드 데이터와 intent·spec·plan으로 canvas 스타일 문서를 만든다.
+ * md의 ```canvas 이름``` 블록에는 canvas.tsx의 그림이 들어간다. canvas 컴포넌트를 쓰므로 CanvasFrame 안에서 그린다.
  */
 export function DefaultCardDocument({ view, state, docs }: { view: CardView; state: BoardState; docs: CardDocs }) {
   const t = useT();
+  const theme = useHostTheme();
   const card = view.card;
   if (!card) return null;
   const categories = state.board?.categories ?? [];
@@ -39,11 +44,7 @@ export function DefaultCardDocument({ view, state, docs }: { view: CardView; sta
     card.status === 'done' && completedAt(card) && `${t('status.done')} ${localDate(completedAt(card)!)}`,
   ].filter(Boolean);
 
-  const sections: { title: string; source?: string }[] = [
-    { title: t('doc.intent'), source: docs.intent },
-    { title: t('doc.spec'), source: docs.spec },
-    { title: t('doc.plan'), source: docs.plan },
-  ];
+  const sections = TASK_DOCS.map((doc) => ({ doc, title: t(`doc.${doc}`), source: docs[doc] }));
 
   return (
     <Stack gap={20}>
@@ -51,8 +52,18 @@ export function DefaultCardDocument({ view, state, docs }: { view: CardView; sta
         <Text size="small" tone="tertiary">
           {meta.join(' · ')}
         </Text>
-        <H1>{card.title}</H1>
-        {card.description && <Text tone="secondary">{card.description}</Text>}
+        <EditableField
+          value={card.title}
+          style={{ ...canvasTypography.h1, margin: 0 }}
+          onCommit={(title) => title.trim() && send({ type: 'updateCard', id: card.id, patch: { title: title.trim() } })}
+        />
+        <EditableField
+          value={card.description ?? ''}
+          multiline
+          placeholder={t('edit.descriptionPlaceholder')}
+          style={{ ...canvasTypography.body, color: theme.text.secondary }}
+          onCommit={(description) => send({ type: 'updateCard', id: card.id, patch: { description } })}
+        />
       </Stack>
 
       <Grid columns="repeat(auto-fit, minmax(140px, 1fr))" gap={16}>
@@ -70,16 +81,12 @@ export function DefaultCardDocument({ view, state, docs }: { view: CardView; sta
         </Callout>
       )}
 
-      {sections.map(({ title, source }) => {
-        const blocks = source ? documentBlocks(source, { skipTitle: true, demote: 1 }) : [];
-        if (blocks.length === 0) return null;
-        return (
-          <Stack key={title} gap={10}>
-            <H2>{title}</H2>
-            {blocks.map(renderBlock)}
-          </Stack>
-        );
-      })}
+      {sections.map(({ doc, title, source }) => (
+        <Stack key={doc} gap={10}>
+          <H2>{title}</H2>
+          <EditableMarkdown dir={view.dir} target={doc} source={source ?? ''} options={DOC_OPTIONS} />
+        </Stack>
+      ))}
     </Stack>
   );
 }

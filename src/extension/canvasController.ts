@@ -2,10 +2,11 @@
 
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { compileCanvas } from '../runner/canvas';
+import { canvasLiterals, canvasMode, compileCanvas, encodeLiteral, figureLines } from '../runner/canvas';
 import { canvasChatPrompt, canvasFixPrompt, canvasPrompt } from '../runner/prompt';
 import type { RunService } from '../runner/runService';
-import type { CanvasActionMessage, CanvasPayload, ToExtension } from '../shared/protocol';
+import type { CanvasActionMessage, CanvasPayload, DocTarget, ToExtension } from '../shared/protocol';
+import { TASK_DOCS } from '../core/types';
 import { readTextIfExists, toJson, writeFileAtomic } from '../storage/fsutil';
 import type { BoardController } from './boardController';
 
@@ -16,6 +17,17 @@ export function sharedDocKind(file: string): 'canvas' | 'markdown' | undefined {
   if (file.endsWith('.canvas.tsx')) return 'canvas';
   if (/\.(md|markdown)$/i.test(file)) return 'markdown';
   return undefined;
+}
+
+/** Markdown 공용 문서 옆의 그림 파일: `docs/api.md` → `docs/api.canvas.tsx` */
+export function figuresFileFor(file: string): string {
+  return file.replace(/\.(md|markdown)$/i, '.canvas.tsx');
+}
+
+/** 문서 화면에서 바로 고친 내용을 원문에 넣는다. 그사이 파일이 바뀌었으면 undefined. */
+export function applyDocEdit(current: string, base: string, start: number, end: number, text: string): string | undefined {
+  if (current !== base || start < 0 || end < start || end > current.length) return undefined;
+  return current.slice(0, start) + text + current.slice(end);
 }
 
 export class CanvasController {
@@ -85,11 +97,12 @@ export class CanvasController {
       case 'createCanvas':
         await this.createTemplate(msg.dir);
         return true;
-      case 'openCanvasFile': {
-        const file = msg.dir.startsWith(SHARED) ? this.sharedFile(msg.dir) : this.canvasPath(msg.dir);
-        if (file) await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
+      case 'openCanvasFile':
+        await this.openCode(msg.dir, msg.line);
         return true;
-      }
+      case 'editDocText':
+        await this.editText(msg);
+        return true;
       default:
         return false;
     }
@@ -100,45 +113,87 @@ export class CanvasController {
     for (const dir of this.watched.keys()) await this.send(dir, false);
   }
 
+  /** 그림·canvas 코드 파일. 카드는 canvas.tsx, 공용 문서는 canvas 문서 자체 또는 Markdown 옆의 그림 파일이다. */
+  private codeFile(dir: string): string | undefined {
+    if (!dir.startsWith(SHARED)) return this.canvasPath(dir);
+    const file = this.sharedFile(dir);
+    const kind = file && sharedDocKind(file);
+    return kind === 'canvas' ? file : kind === 'markdown' ? figuresFileFor(file!) : undefined;
+  }
+
+  private targetFile(dir: string, target: DocTarget): string | undefined {
+    if (target === 'code') return this.codeFile(dir);
+    if (target === 'markdown') return dir.startsWith(SHARED) ? this.sharedFile(dir) : undefined;
+    return dir.startsWith(SHARED) || !TASK_DOCS.includes(target) ? undefined : this.board.taskDocPath(dir, target);
+  }
+
   private async send(dir: string, force: boolean): Promise<void> {
     const shared = dir.startsWith(SHARED);
-    const file = shared ? this.sharedFile(dir) : this.canvasPath(dir);
-    const source = file ? await readTextIfExists(file) : undefined;
-    const kind = shared ? (file ? sharedDocKind(file) : undefined) : 'canvas';
-    // canvas가 없는 카드는 작업 문서로 기본 문서를 그리므로, 작업 문서가 바뀌어도 다시 보낸다.
-    const docs =
-      !shared && source === undefined
-        ? {
-            intent: await this.board.repo.readTaskDoc(dir, 'intent'),
-            spec: await this.board.repo.readTaskDoc(dir, 'spec'),
-            plan: await this.board.repo.readTaskDoc(dir, 'plan'),
-          }
-        : undefined;
-    const signature = source ?? JSON.stringify(docs ?? null);
+    const file = shared ? this.sharedFile(dir) : undefined;
+    const kind = file ? sharedDocKind(file) : undefined;
+    const main = file ? await readTextIfExists(file) : undefined;
+    const codeFile = this.codeFile(dir);
+    const source = codeFile ? await readTextIfExists(codeFile) : undefined;
+    // 카드 문서는 작업 문서를 바탕으로 그리므로 작업 문서가 바뀌어도 다시 보낸다.
+    const docs = shared
+      ? undefined
+      : {
+          intent: await this.board.repo.readTaskDoc(dir, 'intent'),
+          spec: await this.board.repo.readTaskDoc(dir, 'spec'),
+          plan: await this.board.repo.readTaskDoc(dir, 'plan'),
+        };
+    const signature = JSON.stringify([main ?? null, source ?? null, docs ?? null]);
     if (!force && signature === this.watched.get(dir)) return;
     this.watched.set(dir, signature);
     const card = shared ? undefined : this.board.getCard(dir);
+    const rel = (f: string) => path.relative(this.board.root, f);
     const payload: CanvasPayload = {
       dir,
       kind: shared ? 'shared' : 'card',
-      exists: source !== undefined,
+      exists: shared ? main !== undefined : source !== undefined,
       trusted: vscode.workspace.isTrusted,
       state: await this.readState(dir),
       canStart: !!card?.agents.implementer,
       docs,
-      path: file && path.relative(this.board.root, file),
+      path: file ? rel(file) : codeFile && rel(codeFile),
     };
-    if (source !== undefined && kind === 'markdown') payload.markdown = source;
-    else if (source !== undefined && kind === undefined) payload.unsupported = true;
-    else if (source !== undefined && payload.trusted) {
-      const compiled = compileCanvas(source);
-      if ('code' in compiled) payload.code = compiled.code;
-      else {
-        payload.error = compiled.line ? `${compiled.error} (line ${compiled.line})` : compiled.error;
-        await this.reportError(dir, payload.error);
+    if (kind === 'markdown') payload.markdown = main;
+    else if (shared && main !== undefined && kind === undefined) payload.unsupported = true;
+    if (source !== undefined && codeFile) {
+      payload.mode = canvasMode(source);
+      payload.source = source;
+      payload.codePath = rel(codeFile);
+      payload.literals = canvasLiterals(source);
+      payload.figureLines = figureLines(source);
+      if (payload.trusted) {
+        const compiled = compileCanvas(source);
+        if ('code' in compiled) payload.code = compiled.code;
+        else {
+          payload.error = compiled.line ? `${compiled.error} (line ${compiled.line})` : compiled.error;
+          await this.reportError(dir, payload.error);
+        }
       }
     }
     this.board.post({ type: 'canvas', payload });
+  }
+
+  /** 문서 화면에서 바로 고친 글자·절·체크박스를 원문에 넣는다. */
+  private async editText(msg: Extract<ToExtension, { type: 'editDocText' }>): Promise<void> {
+    const file = this.targetFile(msg.dir, msg.target);
+    const current = file ? await readTextIfExists(file) : undefined;
+    let text: string | undefined = msg.text;
+    if (msg.literal && current !== undefined) {
+      const literal = canvasLiterals(current).find((l) => l.start === msg.start && l.end === msg.end);
+      text = literal && encodeLiteral(literal, current.slice(literal.start, literal.end), msg.text);
+    }
+    const next = current === undefined || text === undefined ? undefined : applyDocEdit(current, msg.base, msg.start, msg.end, text);
+    if (!file || next === undefined) {
+      this.board.post({ type: 'docTextConflict', dir: msg.dir });
+      await this.send(msg.dir, true);
+      return;
+    }
+    await writeFileAtomic(file, next);
+    await this.send(msg.dir, false);
   }
 
   /** CA-3: 구현자 세션에 오류를 한 번만 알린다. */
@@ -179,27 +234,43 @@ export class CanvasController {
     }
   }
 
-  /** 빈 canvas를 만들고 편집기에서 연다. */
-  private async createTemplate(dir: string): Promise<void> {
-    const file = this.canvasPath(dir);
-    if ((await readTextIfExists(file)) === undefined) {
-      const card = this.board.getCard(dir);
-      await writeFileAtomic(file, canvasTemplate(card?.title ?? dir, card?.description));
+  /** 코드를 보드 옆 칸에 연다. 저장하면 문서가 바로 다시 그려진다. 코드 파일이 없는 공용 문서는 문서 파일을 연다. */
+  private async openCode(dir: string, line?: number): Promise<void> {
+    const code = this.codeFile(dir);
+    const file = code && (await readTextIfExists(code)) !== undefined ? code : dir.startsWith(SHARED) ? this.sharedFile(dir) : undefined;
+    if (!file) return this.createTemplate(dir);
+    const editor = await vscode.window.showTextDocument(vscode.Uri.file(file), { preview: false, viewColumn: vscode.ViewColumn.Beside });
+    if (line) {
+      const at = new vscode.Position(Math.max(0, line - 1), 0);
+      editor.selection = new vscode.Selection(at, at);
+      editor.revealRange(new vscode.Range(at, at), vscode.TextEditorRevealType.InCenter);
     }
-    await vscode.window.showTextDocument(vscode.Uri.file(file), { preview: false });
+  }
+
+  /** 그림 파일을 예시와 함께 만들고 옆 칸에 연다. */
+  private async createTemplate(dir: string): Promise<void> {
+    const file = this.codeFile(dir);
+    if (!file) return;
+    if ((await readTextIfExists(file)) === undefined) await writeFileAtomic(file, figuresTemplate());
+    await vscode.window.showTextDocument(vscode.Uri.file(file), { preview: false, viewColumn: vscode.ViewColumn.Beside });
   }
 }
 
-export function canvasTemplate(title: string, description: string | undefined): string {
-  const text = JSON.stringify(description ?? '');
-  return `import { H1, Stack, Text } from "cursor/canvas";
+/** 그림 모음 예시. md 문서에 ```canvas Example``` 블록을 넣으면 그 자리에 그려진다. */
+export function figuresTemplate(): string {
+  return `// 문서의 그림만 둡니다. 글은 intent·spec·plan.md에 씁니다.
+// md에 아래처럼 쓰면 그 자리에 같은 이름의 컴포넌트가 그려집니다.
+//
+//   \`\`\`canvas Example
+//   \`\`\`
+import { Row, Stat } from "cursor/canvas";
 
-export default function TaskCanvas() {
+export function Example() {
   return (
-    <Stack gap={16}>
-      <H1>${title.replace(/[<>{}]/g, '')}</H1>
-      {${text} && <Text tone="secondary">{${text}}</Text>}
-    </Stack>
+    <Row gap={24}>
+      <Stat value="3" label="예시 지표" />
+      <Stat value="80%" label="진행률" tone="success" />
+    </Row>
   );
 }
 `;

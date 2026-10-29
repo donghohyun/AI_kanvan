@@ -1,5 +1,6 @@
 // 보드 컨트롤러가 실행 관리 기능에 접근하는 경계. 2단계 RunService가 구현한다.
 
+import type { CardActivity } from '../core/activity';
 import type { ReviewSummary } from '../core/status';
 import { NO_REVIEW } from '../core/status';
 import type { Card, Role, RunStatus, ToolId } from '../core/types';
@@ -16,6 +17,7 @@ export interface RunsBridge {
   hooksInstalled(): boolean;
   hookToolList(): ToolId[];
   cardSessions(cardId: string): CardSession[];
+  cardActivity(cardId: string): CardActivity | undefined;
   runs(cardId: string): Promise<{ runs: RunView[]; sessions: Partial<Record<Role, string>> }>;
   /** 실행 관련 웹뷰 메시지를 처리한다. 처리하지 않으면 false. */
   handle(msg: ToExtension): Promise<boolean>;
@@ -26,6 +28,7 @@ export interface RunsBridge {
 export const NO_RUNS: RunsBridge = {
   runStatus: () => ({}),
   reviewSummary: () => NO_REVIEW,
+  cardActivity: () => undefined,
   hasActiveRun: () => false,
   stopAll: async () => undefined,
   tools: () => [],

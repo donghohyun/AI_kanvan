@@ -109,6 +109,10 @@ export function Runs({ view, card, state }: { view: CardView; card: Card; state:
   );
 }
 
+const REPORT_BADGE = { done: 'ok', partial: 'warn', blocked: 'error' } as const;
+const CHECK_BADGE = { pass: 'ok', fail: 'error', not_run: 'warn' } as const;
+const SEVERITY_BADGE = { high: 'error', medium: 'warn', low: '' } as const;
+
 function RunDetail({ dir, run }: { dir: string; run: RunView }) {
   const t = useT();
   const none = <span className="muted">{t('runs.notProvided')}</span>;
@@ -124,7 +128,33 @@ function RunDetail({ dir, run }: { dir: string; run: RunView }) {
         </div>
       )}
       <h4>{t('runs.summary')}</h4>
-      {run.summary ? <pre className="text">{run.summary}</pre> : none}
+      {run.report ? (
+        <div className="report">
+          <div>
+            <span className={`badge ${REPORT_BADGE[run.report.status]}`}>{t(`report.${run.report.status}`)}</span> {run.report.result}
+          </div>
+          {run.report.remaining.length > 0 && (
+            <div>
+              <span className="muted">{t('report.remaining')}</span>
+              <ul>
+                {run.report.remaining.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {run.report.blocker && (
+            <div>
+              <span className="muted">{t('report.blocker')}</span> {run.report.blocker}
+            </div>
+          )}
+        </div>
+      ) : run.summary ? (
+        <pre className="text">{run.summary}</pre>
+      ) : (
+        none
+      )}
+      {run.tone.length > 0 && <div className="muted small">{t('tone.issues', { list: run.tone.map((i) => t(`tone.${i}`)).join(', ') })}</div>}
       <h4>{t('runs.changes')}</h4>
       {run.changes?.length ? (
         <ul>
@@ -153,6 +183,7 @@ function RunDetail({ dir, run }: { dir: string; run: RunView }) {
           <ul>
             {run.review.findings.map((f, i) => (
               <li key={i}>
+                {f.severity && <span className={`badge ${SEVERITY_BADGE[f.severity]}`}>{t(`severity.${f.severity}`)}</span>}{' '}
                 {f.file && (
                   <code>
                     {f.file}
@@ -165,7 +196,24 @@ function RunDetail({ dir, run }: { dir: string; run: RunView }) {
           </ul>
         </div>
       )}
-      {run.verification ? <pre className="text">{run.verification}</pre> : !run.review && none}
+      {run.report ? (
+        run.report.checks.length ? (
+          <ul>
+            {run.report.checks.map((c, i) => (
+              <li key={i}>
+                <span className={`badge ${CHECK_BADGE[c.outcome]}`}>{t(`check.${c.outcome}`)}</span> <code>{c.command}</code>
+                {c.detail && <span className="muted"> {c.detail}</span>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          !run.review && none
+        )
+      ) : run.verification ? (
+        <pre className="text">{run.verification}</pre>
+      ) : (
+        !run.review && none
+      )}
       <h4>{t('runs.transcript')}</h4>
       {run.transcriptPath ? (
         <button onClick={() => send({ type: 'openTranscript', dir, runId: run.runId })}>{t('runs.openTranscript')}</button>

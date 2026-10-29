@@ -101,7 +101,7 @@ describe('document updates (E-11)', () => {
     expect(text).toContain('- plan: /p');
     expect(text).not.toContain('canvas');
     expect(sessionNotice({ id: 'T', title: 't' }, true, decision, { intent: '/i', spec: '/s', plan: '/p' }, { path: '/c.tsx', guide: '/g.md' })).toContain(
-      'document is /c.tsx (a cursor/canvas file). If you create or update it, follow /g.md',
+      'figures (diagrams, charts) go in /c.tsx and are placed into the md files with ```canvas Name``` blocks. If you add or change figures, follow /g.md',
     );
   });
 });

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "TASK-4",
+  "title": "칸반보드 디자인 및 말투 참고 자료 조사",
+  "status": "in_progress",
+  "statusVersion": 1,
+  "order": 3,
+  "agents": {
+    "implementer": {
+      "tool": "claude"
+    }
+  },
+  "relatedDocs": [],
+  "createdAt": "2026-10-29T02:57:31.860Z",
+  "updatedAt": "2026-10-29T02:57:31.890Z"
+}

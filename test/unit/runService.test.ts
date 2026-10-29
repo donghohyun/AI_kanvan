@@ -4,7 +4,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { claudeAdapter } from '../../src/adapters/claude';
 import { progressOf } from '../../src/core/checklist';
 import type { RunRecord } from '../../src/core/runs';
 import { moveCard } from '../../src/core/status';
@@ -17,6 +18,8 @@ import { BoardRepository } from '../../src/storage/repository';
 import { stub } from '../stubs/vscode';
 
 const FAKE = path.resolve('test/fixtures/fake-agent.mjs');
+/** 이 기기에 Cursor CLI가 있어도 테스트에서는 없는 것으로 본다. */
+const NO_CLI = path.resolve('test/fixtures/no-such-cli');
 
 class FakeBoard implements BoardAccess {
   readonly cards = new Map<string, Card>();
@@ -31,7 +34,7 @@ class FakeBoard implements BoardAccess {
   getCard = (id: string) => this.cards.get(id);
   allCards = () => [...this.cards.values()];
   saveCard = async (card: Card) => {
-    this.cards.set(card.id, card);
+    if (!this.staleNewCards || this.cards.has(card.id)) this.cards.set(card.id, card);
     await this.repo.saveCard(card);
   };
   progress = async (id: string) => progressOf(await this.repo.readTaskDoc(id, 'plan'));
@@ -44,10 +47,12 @@ class FakeBoard implements BoardAccess {
     const r = moveCard(this.cards.get(id)!, to, { now: new Date().toISOString(), hasActiveRun: false });
     await this.saveCard(r.card);
   };
+  /** 실제 보드처럼 새 카드가 다음 reload 전까지 getCard에 보이지 않게 한다. */
+  staleNewCards = false;
   createCard = async (title: string) => {
     const order = Math.max(0, ...[...this.cards.values()].map((c) => c.order)) + 1;
     const card = await this.repo.createCard({ title }, order);
-    this.cards.set(card.id, card);
+    if (!this.staleNewCards) this.cards.set(card.id, card);
     return card;
   };
   refresh = () => undefined;
@@ -103,7 +108,7 @@ beforeEach(async () => {
   repo = new BoardRepository(root, 'en');
   await repo.init();
   board = new FakeBoard(repo);
-  service = new RunService(board, new RunStore(repo.localDir), path.resolve('dist/hook.js'), () => ({ claude: FAKE }));
+  service = new RunService(board, new RunStore(repo.localDir), path.resolve('dist/hook.js'), () => ({ claude: FAKE, cursor: NO_CLI }));
   await service.init();
   stub.answers = [];
   stub.messages = [];
@@ -374,6 +379,33 @@ describe('recovery and sessions', () => {
     await service.handle({ type: 'linkSession', tool: 'claude', sessionId: 'EXT' });
     expect(stub.messages.some((m) => m.text.includes('already bound to TASK-1'))).toBe(true);
   });
+  it('sends later events of a session picked for another card to that card (pickSession)', async () => {
+    const first = await newCard({ implementer: 'claude' });
+    const second = await newCard({ implementer: 'claude' });
+    const inbox = new RunStore(repo.localDir).inboxDir;
+    await fs.mkdir(inbox, { recursive: true });
+    const write = (name: string, input: unknown) =>
+      fs.writeFile(path.join(inbox, `${name}.json`), JSON.stringify({ tool: 'claude', receivedAt: new Date().toISOString(), input }));
+    stub.answers = [{ label: first.id }, { role: 'implementer' }];
+    await service.handle({ type: 'linkSession', tool: 'claude', sessionId: 'MOVE' });
+    await write('000000000000001-a', { hook_event_name: 'UserPromptSubmit', session_id: 'MOVE', prompt: 'first' });
+    await service.processInbox();
+
+    // 이전 카드에서 연결을 풀고, 다음 카드에서 같은 세션을 고른다.
+    await service.handle({ type: 'newSession', dir: first.id, role: 'implementer' });
+    const spy = vi.spyOn(claudeAdapter, 'listSessions').mockResolvedValue([{ id: 'MOVE', updatedAt: new Date().toISOString() }]);
+    stub.answers = [{ label: 'MOVE' }];
+    await service.handle({ type: 'pickSession', dir: second.id, role: 'implementer' });
+    spy.mockRestore();
+    await write('000000000000002-b', { hook_event_name: 'Stop', session_id: 'MOVE', last_assistant_message: '두 번째 카드 작업' });
+    await service.processInbox();
+
+    const [old] = await runsOf(first.id);
+    const [moved] = await runsOf(second.id);
+    expect(old).toMatchObject({ status: 'ended' });
+    expect(old!.summary).toBeUndefined();
+    expect(moved).toMatchObject({ external: true, toolSessionId: 'MOVE', summary: '두 번째 카드 작업' });
+  });
 });
 
 describe('opening a session from the card', () => {
@@ -495,6 +527,18 @@ describe('auto card creation and linking (E-9 ~ E-12)', () => {
     await auto.init();
   });
   afterEach(() => auto.dispose());
+
+  it('links the session even before the board sees the new card, without relinking forever', async () => {
+    board.staleNewCards = true;
+    await classify({ cardId: null, title: '로그 정리', intent: 'x', spec: [], plan: ['a'] });
+    for (const input of session('S9', '로그 정리해줘')) await hook(input);
+    await auto.processInbox();
+
+    expect((await runsOf('TASK-1'))[0]).toMatchObject({ external: true, toolSessionId: 'S9' });
+    const ids = (await store.loadEvents()).map((e) => e.eventId);
+    expect(ids.some((id) => id.endsWith(':linked:linked'))).toBe(false);
+    expect(ids.length).toBeLessThanOrEqual(4);
+  });
 
   it('creates a Todo card from the first request of an unknown session', async () => {
     await classify({ cardId: null, title: '비밀번호 재설정', intent: '재설정 기능', spec: ['메일 링크'], plan: ['API', '화면'] });

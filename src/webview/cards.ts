@@ -1,7 +1,7 @@
 // 웹뷰에서 쓰는 카드 계산 도우미.
 
 import { cardCategories, completedAt, localDate, normalizeTags } from '../core/board';
-import type { Card, Category } from '../core/types';
+import type { Card, Category, RunStatus } from '../core/types';
 import type { BoardState, CardView } from '../shared/protocol';
 
 export type Placed = CardView & { card: Card };
@@ -20,11 +20,31 @@ export interface BoardFilter {
   category?: string;
   /** Done 열에 보일 완료 시작일 `YYYY-MM-DD` */
   doneSince?: string;
+  /** 사람이 볼 카드만 */
+  attention?: boolean;
+}
+
+/** 사람의 입력이나 확인이 필요한 실행 상태 */
+export const ATTENTION: ReadonlySet<RunStatus> = new Set(['input_required', 'error', 'unknown']);
+
+/** 에이전트가 기다리거나 실패했거나, 끝난 결과를 아직 안 본 카드 */
+export function needsAttention(view: CardView): boolean {
+  return view.sessions.some((s) => ATTENTION.has(s.status)) || !!view.activity?.unread;
+}
+
+/** 지난 시간을 "방금 / N분 / N시간 / N일" 단위로 나눈다. */
+export function elapsed(at: string, now = Date.now()): { unit: 'now' | 'minutes' | 'hours' | 'days'; n: number } {
+  const minutes = Math.max(0, Math.floor((now - Date.parse(at)) / 60000));
+  if (minutes < 1) return { unit: 'now', n: 0 };
+  if (minutes < 60) return { unit: 'minutes', n: minutes };
+  if (minutes < 60 * 24) return { unit: 'hours', n: Math.floor(minutes / 60) };
+  return { unit: 'days', n: Math.floor(minutes / (60 * 24)) };
 }
 
 /** TASK-2 DS-3, DS-4 */
 export function matchesFilter(view: Placed, filter: BoardFilter, categories: Category[]): boolean {
   if (filter.category && !categoriesOf(view, categories).some((c) => c.tag === filter.category)) return false;
+  if (filter.attention && !needsAttention(view)) return false;
   if (filter.doneSince && view.card.status === 'done') {
     const at = completedAt(view.card);
     if (!at || localDate(at) < filter.doneSince) return false;

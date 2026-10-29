@@ -2,6 +2,9 @@
 
 import type { TagProgress } from '../core/board';
 import type { ChecklistItem } from '../core/checklist';
+import type { CardActivity } from '../core/activity';
+import type { ImplementerReport, ReportStatus, ToneIssue } from '../core/report';
+import type { ReviewResult } from '../core/runs';
 import type {
   AgentAssignment,
   BoardConfig,
@@ -27,9 +30,13 @@ export interface RunView {
   endedAt?: string;
   summary?: string;
   verification?: string;
+  /** 구현자가 낸 보고. 상태 라벨은 보드가 정한다. */
+  report?: ImplementerReport & { status: ReportStatus };
+  /** 말투 검사에서 고치지 못한 문제 */
+  tone: ToneIssue[];
   changes?: string[];
   diff?: string;
-  review?: { verdict: 'pass' | 'changes_requested'; findings: { file?: string; line?: number; message: string }[] };
+  review?: ReviewResult;
   reviewedRef?: string;
   transcriptPath?: string;
   statusDetail?: string;
@@ -59,6 +66,8 @@ export interface CardView {
   /** plan.md 항목의 구분별 진행률 (TASK-2 CT-2) */
   tags: TagProgress;
   sessions: CardSession[];
+  /** 마지막 활동 한 줄과 확인 안 한 결과 여부 */
+  activity?: CardActivity;
   hasCanvas: boolean;
   duplicate: boolean;
   runStatus: Partial<Record<Role, RunStatus>>;
@@ -129,6 +138,7 @@ export type ToExtension =
   | { type: 'removeSharedDoc'; id: string }
   | { type: 'createDocTask'; id: string }
   | { type: 'loadRuns'; dir: string }
+  | { type: 'markSeen'; dir: string }
   | { type: 'startRun'; dir: string; role: Role; resume: boolean }
   | { type: 'stopRun'; dir: string; role: Role }
   | { type: 'resolveRun'; dir: string; runId: string; status: 'ended' | 'error' }
@@ -156,7 +166,28 @@ export type ToExtension =
   | { type: 'requestCanvas'; dir: string }
   | { type: 'fixCanvas'; dir: string; error: string }
   | { type: 'createCanvas'; dir: string }
-  | { type: 'openCanvasFile'; dir: string };
+  /** 코드를 보드 옆 칸에 연다. line이 있으면 그 줄로 간다. */
+  | { type: 'openCanvasFile'; dir: string; line?: number }
+  /**
+   * 문서 화면에서 바로 고친 내용. 원문 [start, end)를 text로 바꾼다. 파일이 base와 다르면 고치지 않는다.
+   * literal이면 [start, end)는 코드의 문자열이고 text는 새 글자다. 따옴표·이스케이프는 확장 프로그램이 붙인다.
+   */
+  | { type: 'editDocText'; dir: string; target: DocTarget; base: string; start: number; end: number; text: string; literal?: boolean };
+
+/** 문서 화면에서 고칠 수 있는 파일: 그림·canvas 코드, Markdown 공용 문서, 카드 작업 문서 */
+export type DocTarget = 'code' | 'markdown' | TaskDoc;
+
+/** 화면에 보일 수 있는, canvas 코드에 직접 쓴 글자 */
+export interface CanvasLiteral {
+  start: number;
+  end: number;
+  /** 1부터 */
+  line: number;
+  value: string;
+  kind: 'string' | 'jsxText' | 'jsxAttr';
+  /** 감싼 가장 안쪽 괄호. 값이 같은 글자는 같은 괄호의 다른 글자로 구분한다. */
+  group?: number;
+}
 
 /** canvas의 useCanvasAction 동작 (TASK-3 CV-6) */
 export type CanvasActionMessage =
@@ -182,7 +213,15 @@ export interface CanvasPayload {
   path?: string;
   /** 신뢰하지 않는 작업 공간이면 실행하지 않는다 (CV-9) */
   trusted: boolean;
+  /** 페이지 전체 canvas(default export) 또는 md에 끼워 넣는 그림 모음 */
+  mode?: 'page' | 'figures';
+  /** canvas 코드 원문과 변환 결과. 그림 모음은 카드의 canvas.tsx 또는 Markdown 공용 문서 옆의 `.canvas.tsx`다. */
+  source?: string;
   code?: string;
+  codePath?: string;
+  literals?: CanvasLiteral[];
+  /** 그림 이름 → 정의한 줄 */
+  figureLines?: Record<string, number>;
   error?: string;
   state: Record<string, unknown>;
   canStart: boolean;
@@ -197,5 +236,7 @@ export type ToWebview =
   | { type: 'runs'; dir: string; runs: RunView[]; sessions: Partial<Record<Role, string>> }
   | { type: 'showSettings' }
   | { type: 'canvas'; payload: CanvasPayload }
+  /** 바로 고치는 사이 파일이 다른 곳에서 바뀌었다 */
+  | { type: 'docTextConflict'; dir: string }
   /** 설정 화면 입력 검증 실패 (ST-7) */
   | { type: 'settingError'; field: string; message: string };

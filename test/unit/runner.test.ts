@@ -8,7 +8,7 @@ import type { AgentEvent } from '../../src/core/runs';
 import { addToExclude, changesSince, codeRef, createWorktree, defaultWorkspace, docHistory, headCommit, isTracked } from '../../src/runner/git';
 import { HOOK_MARKER, hookCommand, installHooks, mergeCursorHooks, mergeMatcherHooks } from '../../src/runner/hookInstall';
 import { isProcessAlive, spawnAgent } from '../../src/runner/process';
-import { parseReview } from '../../src/runner/prompt';
+import { parseReport, parseReview } from '../../src/runner/prompt';
 import { RunStore } from '../../src/runner/runStore';
 
 let tmp: string;
@@ -231,6 +231,24 @@ describe('RunStore (H-5)', () => {
     expect(state.runs[0]!.status).toBe('running');
     expect(state.seenEventIds).toEqual(['e1']);
   });
+
+  it('drops entries left by the relink loop and rewrites both files', async () => {
+    const store = new RunStore(tmp);
+    const looped = 'h:1:linked:linked:linked';
+    await store.saveRuns({ runs: [], seenEventIds: ['h:0', 'h:1:linked', looped] });
+    const ev = (eventId: string, prompt?: string): AgentEvent => ({
+      eventId, type: 'turn.started', tool: 'claude', toolSessionId: 'S', source: 'hook', seq: 1, occurredAt: '2026-01-01T00:00:01.000Z',
+      ...(prompt ? { payload: { prompt } } : {}),
+    });
+    await store.appendEvent(ev('h:2', 'why does :linked:linked repeat?'));
+    await store.appendEvent(ev(looped));
+    await store.appendEvent(ev(`${looped}:linked`));
+
+    const state = await store.loadRuns();
+    expect(state.seenEventIds).toEqual(['h:0', 'h:1:linked', 'h:2']);
+    expect((await store.loadEvents()).map((e) => e.eventId)).toEqual(['h:2']);
+    expect(await fs.readFile(path.join(tmp, 'runs.json'), 'utf8')).not.toContain(looped);
+  });
 });
 
 describe('parseReview', () => {
@@ -238,6 +256,28 @@ describe('parseReview', () => {
     const text = 'blah\n```json\n{"verdict":"x"}\n```\nmore\n```json\n{"verdict":"changes_requested","findings":[{"file":"a.ts","line":3,"message":"fix"},{"message":""}]}\n```';
     expect(parseReview(text)).toEqual({ verdict: 'changes_requested', findings: [{ file: 'a.ts', line: 3, message: 'fix' }] });
     expect(parseReview('no block')).toBeUndefined();
+  });
+});
+
+describe('parseReport', () => {
+  it('reads the report fields and drops malformed ones', () => {
+    const text = '작업했어요.\n```json\n{"result":" add 함수 추가 ","remaining":["E2E",""],"checks":[{"command":"npm test","outcome":"pass","detail":"4/4"},{"command":"e2e","outcome":"?"},{"outcome":"pass"}]}\n```';
+    expect(parseReport(text)).toEqual({
+      result: 'add 함수 추가',
+      remaining: ['E2E'],
+      blocker: undefined,
+      checks: [
+        { command: 'npm test', outcome: 'pass', detail: '4/4' },
+        { command: 'e2e', outcome: 'not_run', detail: undefined },
+      ],
+    });
+    expect(parseReport('```json\n{"verdict":"pass"}\n```')).toBeUndefined();
+    expect(parseReport('no block')).toBeUndefined();
+  });
+
+  it('reads review severity', () => {
+    const text = '```json\n{"verdict":"changes_requested","findings":[{"message":"a","severity":"high"},{"message":"b","severity":"urgent"}]}\n```';
+    expect(parseReview(text)!.findings.map((f) => f.severity)).toEqual(['high', undefined]);
   });
 });
 

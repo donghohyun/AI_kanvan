@@ -9,6 +9,7 @@ import type { ParsedEvent } from '../adapters/types';
 import {
   ACTIVE,
   TERMINAL,
+  resolveRun,
   applyEvent,
   latestRunStatus,
   nextLoopStep,
@@ -20,6 +21,8 @@ import {
   type RunRecord,
   type RunsState,
 } from '../core/runs';
+import { cardActivity, type CardActivity } from '../core/activity';
+import { runText } from '../core/report';
 import { applyRunStatusChange, autoMoveTarget, canAutoDone, type ReviewSummary } from '../core/status';
 import { ROLES, TOOL_IDS, type BoardSettings, type Card, type Progress, type Role, type SharedDoc, type TaskDoc, type ToolId } from '../core/types';
 import type { Locale, MessageKey } from '../shared/i18n';
@@ -27,6 +30,7 @@ import type { BoardState, CardSession, RunView, ToExtension, ToolInfo, ToWebview
 import { pathExists, readTextIfExists, toJson, writeFileAtomic } from '../storage/fsutil';
 import { addToExclude, changesSince, codeRef, createWorktree, defaultWorkspace, headCommit, isTracked, mergeBase } from './git';
 import { HOOK_FILES, hookCommand, installHooks } from './hookInstall';
+import { isLinkedEvent, LINKED_SUFFIX } from './runStore';
 import { openInToolUi, resumeInTerminal } from './openSession';
 import { isProcessAlive, spawnAgent, type AgentProcess } from './process';
 import {
@@ -41,7 +45,7 @@ import {
   type MatchDecision,
 } from './cardMatcher';
 import { runClassifier } from './classifier';
-import { fixPrompt, implementerPrompt, parseReview, reviewerPrompt, type PromptDocs } from './prompt';
+import { fixPrompt, implementerPrompt, parseReport, parseReview, reviewerPrompt, type PromptDocs } from './prompt';
 import type { RunsBridge } from '../extension/runsBridge';
 import type { RunStore, SessionBindings, UnlinkedSession } from './runStore';
 import { envWithBinary, findBinary, findExecutable, readVersion } from './tools';
@@ -90,6 +94,7 @@ const CODE_REF_INTERVAL_MS = 3000;
 export class RunService implements RunsBridge, vscode.Disposable {
   private state: RunsState = { runs: [], seenEventIds: [] };
   private sessions: SessionBindings = {};
+  private seen: Record<string, string> = {};
   private unlinked: UnlinkedSession[] = [];
   private toolInfo: ToolInfo[] = [];
   private binaries: Partial<Record<ToolId, string>> = {};
@@ -141,6 +146,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
     this.state = await this.store.loadRuns();
     this.sessions = await this.store.loadSessions().catch(() => ({}));
     this.unlinked = await this.store.loadUnlinked().catch(() => []);
+    this.seen = await this.store.loadSeen().catch(() => ({}));
     this.hookTools = await this.loadHookTools();
     await this.refreshHookScript();
     await this.detectTools();
@@ -184,6 +190,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
   async runs(cardId: string): Promise<{ runs: RunView[]; sessions: Partial<Record<Role, string>> }> {
     const card = this.board.getCard(cardId);
     const current = card ? await this.hashInputs(card) : {};
+    const progress = await this.board.progress(cardId);
     const runs = runsOfCard(this.state, cardId).map(
       (r): RunView => ({
         runId: r.runId,
@@ -192,11 +199,9 @@ export class RunService implements RunsBridge, vscode.Disposable {
         status: r.status,
         startedAt: r.startedAt,
         endedAt: r.endedAt,
-        summary: r.summary,
-        verification: r.verification,
+        ...runText(r, r.role === 'implementer' ? parseReport(r.summary) : undefined, progress),
         changes: r.changes,
         diff: r.diff,
-        review: r.review,
         reviewedRef: r.reviewedRef,
         transcriptPath: r.transcriptPath,
         statusDetail: r.statusDetail,
@@ -215,6 +220,9 @@ export class RunService implements RunsBridge, vscode.Disposable {
     if (!this.ready) return false;
     await this.ready;
     switch (msg.type) {
+      case 'markSeen':
+        await this.markSeen(msg.dir);
+        return true;
       case 'loadRuns':
         await this.postRuns(msg.dir);
         return true;
@@ -583,7 +591,8 @@ export class RunService implements RunsBridge, vscode.Disposable {
 
   // ---- 이벤트 반영 ----
 
-  async dispatch(event: AgentEvent): Promise<void> {
+  async dispatch(incoming: AgentEvent): Promise<void> {
+    const event = await this.followRebind(incoming);
     const { effects, changed } = await this.serial(async () => {
       await this.store.appendEvent(event);
       const result = applyEvent(this.state, event);
@@ -610,9 +619,27 @@ export class RunService implements RunsBridge, vscode.Disposable {
     }
     for (const effect of effects) {
       if (effect.kind === 'runFinished') await this.afterRun(effect.cardId, effect.runId);
-      else if (effect.kind === 'unmatched') await this.handleUnmatched(effect.event);
+      // 연결해서 다시 보낸 이벤트는 다시 연결하지 않는다.
+      else if (effect.kind === 'unmatched' && !isLinkedEvent(effect.event)) await this.handleUnmatched(effect.event);
     }
     this.board.refresh();
+  }
+
+  /**
+   * 세션을 다른 카드로 옮겼으면(세션 선택) 그 뒤 이벤트는 옮긴 카드의 새 회차로 보내고, 이전 카드의 회차는 끝낸다.
+   * 회차는 세션 ID로 찾으므로, 옮긴 카드에 회차가 없으면 이벤트가 계속 이전 카드에 쌓인다.
+   */
+  private async followRebind(event: AgentEvent): Promise<AgentEvent> {
+    if (event.runId || !event.toolSessionId) return event;
+    const run = resolveRun(this.state, event);
+    const bound = this.findBoundCard(event.tool, event.toolSessionId);
+    if (!run || !bound || (run.cardId === bound.cardId && run.role === bound.role)) return event;
+    await this.attachExternal(bound.cardId, bound.role, event.tool, event.toolSessionId, event.occurredAt);
+    if (!TERMINAL.has(run.status)) {
+      await this.serial(() => this.updateRun(run.cardId, run.runId, { status: 'ended', endedAt: event.occurredAt, statusDetail: this.board.t('msg.sessionMoved', { id: bound.cardId }) }));
+    }
+    const target = this.latestRun(bound.cardId, bound.role);
+    return target ? { ...event, cardId: bound.cardId, runId: target.runId } : event;
   }
 
   private async rebaseStatusVersion(cardId: string, runId: string): Promise<void> {
@@ -806,7 +833,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
     }
     if (target) {
       await this.attachExternal(target.cardId, target.role, event.tool, event.toolSessionId, event.occurredAt);
-      await this.dispatch({ ...event, eventId: `${event.eventId}:linked`, cardId: target.cardId, runId: this.latestRun(target.cardId, target.role)?.runId });
+      await this.dispatchLinked(event, target.cardId, this.latestRun(target.cardId, target.role)?.runId);
       return;
     }
     // ST-9: 꺼진 도구의 세션은 자동으로 연결하지 않는다.
@@ -815,6 +842,15 @@ export class RunService implements RunsBridge, vscode.Disposable {
       return;
     }
     await this.addUnlinked(event);
+  }
+
+  /**
+   * 카드를 찾은 세션의 이벤트를 그 회차로 다시 보낸다. 회차가 없으면 보내지 않는다.
+   * 회차 없이 보내면 다시 "알 수 없는 세션"이 되어 연결을 끝없이 반복한다.
+   */
+  private async dispatchLinked(event: AgentEvent, cardId: string, runId: string | undefined): Promise<void> {
+    if (!runId || isLinkedEvent(event)) return;
+    await this.dispatch({ ...event, eventId: `${event.eventId}${LINKED_SUFFIX}`, cardId, runId });
   }
 
   private async addUnlinked(event: AgentEvent): Promise<void> {
@@ -862,9 +898,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
         await this.addUnlinked(event);
         return;
       }
-      for (const e of events) {
-        await this.dispatch({ ...e, eventId: `${e.eventId}:linked`, cardId: result.cardId, runId: this.latestRun(result.cardId, 'implementer')?.runId });
-      }
+      for (const e of events) await this.dispatchLinked(e, result.cardId, this.latestRun(result.cardId, 'implementer')?.runId);
     } finally {
       this.linking.delete(key);
     }
@@ -944,7 +978,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
       return { linked: false };
     }
     await this.serial(() => this.bindUnlocked(card!.id, 'implementer', tool, sessionId, true));
-    await this.attachExternal(card.id, 'implementer', tool, sessionId, new Date().toISOString());
+    await this.attachExternal(card.id, 'implementer', tool, sessionId, new Date().toISOString(), card);
     void vscode.window.showInformationMessage(this.board.t(created ? 'msg.autoCreated' : 'msg.autoLinked', params));
     this.board.refresh();
     return { linked: true, cardId: card.id };
@@ -961,8 +995,8 @@ export class RunService implements RunsBridge, vscode.Disposable {
   }
 
   /** 사용자가 직접 시작한 세션을 카드의 실행 회차로 기록한다. */
-  private async attachExternal(cardId: string, role: Role, tool: ToolId, sessionId: string, at: string): Promise<void> {
-    const card = this.board.getCard(cardId);
+  private async attachExternal(cardId: string, role: Role, tool: ToolId, sessionId: string, at: string, known?: Card): Promise<void> {
+    const card = this.board.getCard(cardId) ?? known;
     if (!card) return;
     await this.bind(cardId, role, tool, sessionId, true);
     await this.serial(async () => {
@@ -1151,6 +1185,20 @@ export class RunService implements RunsBridge, vscode.Disposable {
     }
     const worktree = run?.worktree ? path.resolve(this.board.root, run.worktree) : undefined;
     resumeInTerminal(tool, binary, sessionId, worktree && (await pathExists(worktree)) ? worktree : this.board.root);
+  }
+
+  cardActivity(cardId: string): CardActivity | undefined {
+    return cardActivity(runsOfCard(this.state, cardId), this.seen[cardId], parseReport);
+  }
+
+  /** 카드를 열면 그때까지 끝난 실행을 본 것으로 한다. */
+  private async markSeen(cardId: string): Promise<void> {
+    if (!this.cardActivity(cardId)?.unread) return;
+    await this.serial(async () => {
+      this.seen = { ...this.seen, [cardId]: new Date().toISOString() };
+      await this.store.saveSeen(this.seen);
+    });
+    this.board.refresh();
   }
 
   cardSessions(cardId: string): CardSession[] {

@@ -1,25 +1,61 @@
 # Agent Board canvas guide
 
-A card's document is a single React file at `.agent-board/tasks/<CARD-ID>/canvas.tsx`. Agent Board compiles it and renders it full-screen when someone opens the card. Without this file the board shows a default document built from intent.md, spec.md and plan.md, so write a canvas when the card needs more than that: diagrams, comparisons, decisions at a glance. Shared docs can be canvases too (`docs/<name>.canvas.tsx`). The format is compatible with Cursor canvases: if Cursor is installed, its canvas skill describes the same `cursor/canvas` API.
+Agent Board shows every card and shared doc as a document in the board. Text and pictures live in different files:
+
+- **Text is Markdown.** A card's text is its `intent.md`, `spec.md` and `plan.md`. A shared doc's text is its `.md` file. Never copy this text into code.
+- **Figures are a canvas file.** Diagrams, charts and at-a-glance comparisons are React components in a canvas file, written with `cursor/canvas` components. A card's figures file is `.agent-board/tasks/<CARD-ID>/canvas.tsx`. A shared doc `docs/<name>.md` uses `docs/<name>.canvas.tsx`.
+- **Reference pages are a canvas file with a default export.** Structured references that repeat the same shape many times (an API reference, an ERD) can be one page component: put the entries in a data array and render them with one component. Use this only when the content is mostly repeated structure.
+
+The canvas format is compatible with Cursor canvases: if Cursor is installed, its canvas skill describes the same `cursor/canvas` API.
+
+## Figures
+
+Write each figure as a named export whose name starts with a capital letter. Do not add a default export to a figures file: a default export turns the file into a full page.
+
+```tsx
+import { BarChart } from "cursor/canvas";
+
+export function ProgressByArea() {
+  return <BarChart categories={["BE", "FE"]} series={[{ name: "Done", data: [12, 7] }]} />;
+}
+```
+
+Place it in the Markdown where it belongs:
+
+````md
+## Progress
+
+```canvas ProgressByArea
+```
+````
+
+Other viewers show the block as a short code block, so the Markdown still reads well on GitHub.
+
+Add a figure only when a picture says it better than text: a flow or dependency as boxes and arrows, a chart, a comparison grid. Everything else stays in Markdown.
+
+## Markdown features
+
+Besides headings, lists, task lists, tables, code and quotes, the board renders:
+
+- ```` ```canvas Name ```` blocks: the figure `Name` from the figures file.
+- `<details><summary>Title</summary> … </details>`: a collapsible section (`<details open>` starts open). Leave a blank line after `<summary>…</summary>`.
+- `## [BE] Title` in plan.md: the `[BE]` tag is a category and is shown as a badge.
 
 ## File rules
 
-- Write exactly one file: `.agent-board/tasks/<CARD-ID>/canvas.tsx`. No helper files.
 - Import only from `cursor/canvas` (components, hooks, React hooks). Type-only imports from `react` are allowed. No npm packages, relative imports, or Node built-ins.
-- Default-export the top-level component.
 - Put all data inline. No `fetch()` or other network calls; the document runs offline.
-- Never render placeholders ("TODO", "No data", empty tables). Omit a section that has no real content.
+- Never render placeholders ("TODO", "No data", empty tables). Omit what has no real content.
+- Write visible text as plain string literals, in JSX or in data arrays, not built by joining strings. People edit text in the board by clicking it, which works only for text written literally in the code.
 
-## What a card document should show
+## Reference pages
 
-Lead with what matters most for the task, then supporting detail:
+A page component is the default export. Keep the entries as data and the layout in one component, for example an API reference:
 
-1. A short header line (status, branch, key dates), the title (`H1`) and a one-paragraph summary.
-2. The few facts a reader must know first: a row of `Stat`s or short labeled phrases.
-3. Decisions, boundaries or risks in a `Callout`.
-4. Structured detail in `Table`s under `H2` headings.
-5. A diagram when a flow, dependency or branch structure is easier to read as boxes and arrows.
-6. Remaining work as a `TodoList` that mirrors plan.md.
+- one data array of entries, each with a group, a name, a summary, a request and a response;
+- a search box (`TextInput` with `useCanvasState`) that filters entries;
+- entries grouped under `H2` headings, each in a `CollapsibleSection` with the method or kind as a `Pill`;
+- inside each entry, a `Request` and a `Response` part: a syntax block and tables of fields (name, type, required, description).
 
 ## Components
 
@@ -61,7 +97,7 @@ Hooks and helpers
 | `useHostTheme()` | Colors that follow the editor theme: `text.primary/secondary/tertiary/quaternary/link/onAccent`, `bg.editor/chrome/elevated`, `fill.primary…quaternary`, `stroke.primary/secondary/tertiary/focused`, `accent.primary/control`, `category.<color>`. Call it inside each component that needs colors |
 | `useCanvasState(key, initial)` | Like `useState`, but kept for this card on this machine |
 | `useCanvasAction()` | `dispatch({ type: 'openFile', path })` opens a repository file; `{ type: 'newComposerChat', userPrompt }` sends a request to the card's implementer agent |
-| `computeDAGLayout({ nodes, edges, direction?, nodeWidth?, nodeHeight?, rankGap?, nodeGap?, padding? })` | Layout math for diagrams: returns `nodes` (`x`, `y`, `rank`, `order`), `edges` (`sourceX/Y`, `targetX/Y`, `isBackEdge`), `width`, `height`. You draw the SVG |
+| `computeDAGLayout({ nodes, edges, direction? ("vertical"·"horizontal"), nodeWidth?, nodeHeight?, rankGap?, nodeGap?, padding? })` | Layout math for diagrams: returns `nodes` (`x`, `y`, `rank`, `order`), `edges` (`sourceX/Y`, `targetX/Y`, `isBackEdge`), `width`, `height`. You draw the SVG |
 | `useState`, `useMemo`, `useEffect`, `useRef`, `mergeStyle` | re-exported for convenience |
 
 ## Diagram recipe
@@ -102,6 +138,6 @@ function Flow({ nodes, edges }: { nodes: { id: string; label: string }[]; edges:
 - Use color sparingly and with meaning (status, category). Borders are structural, not decorative.
 - Keep text at or below `H1` size. Label every chart: a specific title, units, and a legend when there is more than one series.
 
-## When the document fails to render
+## When a figure or page fails to render
 
-Agent Board shows the error on the card's document tab and sends it to the implementer session. Fix `canvas.tsx` and save; the document re-renders within a second.
+Agent Board shows the error in place of the figure (or on the document tab for a page) and sends it to the card's implementer session. Fix the canvas file and save; the document re-renders within a second.
