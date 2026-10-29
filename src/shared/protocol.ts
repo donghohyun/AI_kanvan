@@ -175,6 +175,8 @@ export interface CanvasLiteral {
   line: number;
   value: string;
   kind: 'string' | 'jsxText' | 'jsxAttr';
+  /** 감싼 가장 안쪽 괄호. 값이 같은 글자는 같은 괄호의 다른 글자로 구분한다. */
+  group?: number;
 }
 
 /** canvas의 useCanvasAction 동작 (TASK-3 CV-6) */

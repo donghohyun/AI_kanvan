@@ -363,6 +363,30 @@ function textNodes(root: Element, text: string): Text[] {
   return out;
 }
 
+/**
+ * 같은 글자가 코드 여러 곳에 있으면, 같은 괄호에 함께 적힌 글자(표의 한 행 등)가 누른 곳 가까이 보이는 쪽을 고른다.
+ * 누른 곳에서 바깥 요소로 넓혀 가다가 처음 겹치는 글자가 나온 단계에서 한 곳만 가장 많이 겹치면 그곳이다.
+ */
+export function pickByContext(candidates: CanvasLiteral[], literals: CanvasLiteral[], text: string, node: Node, zone: Element): CanvasLiteral | undefined {
+  const siblings = candidates.map(
+    (c) =>
+      new Set(
+        c.group === undefined || c.group < 0
+          ? []
+          : literals.filter((l) => l !== c && l.group === c.group).map((l) => norm(l.value)).filter((v) => v && v !== text),
+      ),
+  );
+  for (let el = node.parentElement; el && zone.contains(el); el = el.parentElement) {
+    const seen = new Set<string>();
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) seen.add(norm((n as Text).data));
+    const scores = siblings.map((s) => [...s].filter((v) => seen.has(v)).length);
+    const best = Math.max(...scores);
+    if (best === 0) continue;
+    return scores.filter((s) => s === best).length === 1 ? candidates[scores.indexOf(best)] : undefined;
+  }
+  return undefined;
+}
 
 interface Popover {
   x: number;
@@ -443,6 +467,7 @@ export function CodeEditLayer({ dir, payload, canAsk, children }: { dir: string;
     // inline Markdown 처리로 쪼개진 글자는 그 글자를 포함한 문자열을 찾는다.
     const candidates = exact.length ? exact : text.length >= 2 ? literals.filter((l) => norm(l.value).includes(text)) : [];
     let chosen = candidates.length === 1 ? candidates[0] : undefined;
+    if (!chosen && candidates.length > 1 && node) chosen = pickByContext(candidates, literals, text, node, zone);
     if (!chosen && exact.length > 1 && node) {
       const nodes = textNodes(ref.current, text);
       if (nodes.length === exact.length) chosen = exact[nodes.indexOf(node)];

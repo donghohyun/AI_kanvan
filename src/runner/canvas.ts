@@ -52,12 +52,17 @@ export function canvasLiterals(source: string): CanvasLiteral[] {
     return [];
   }
   const out: CanvasLiteral[] = [];
+  // 글자를 감싼 가장 안쪽 괄호. 같은 괄호 안 글자(표의 한 행 등)는 화면에서도 함께 보인다.
+  const open: number[] = [];
   tokens.forEach((t, i) => {
+    if (OPENERS.has(t.type)) open.push(i);
+    else if (CLOSERS.has(t.type)) open.pop();
     if (t.isType) return;
     const raw = source.slice(t.start, t.end);
+    const group = open.at(-1) ?? -1;
     if (t.type === TokenType.jsxText) {
       if (!raw.trim()) return;
-      out.push({ start: t.start, end: t.end, line: lineAt(source, t.start), value: jsxTextValue(raw), kind: 'jsxText' });
+      out.push({ start: t.start, end: t.end, line: lineAt(source, t.start), value: jsxTextValue(raw), kind: 'jsxText', group });
       return;
     }
     if (t.type !== TokenType.string) return;
@@ -70,10 +75,14 @@ export function canvasLiterals(source: string): CanvasLiteral[] {
       line: lineAt(source, t.start),
       value: attr ? raw.slice(1, -1) : decodeString(raw),
       kind: attr ? 'jsxAttr' : 'string',
+      group,
     });
   });
   return out;
 }
+
+const OPENERS = new Set([TokenType.parenL, TokenType.bracketL, TokenType.braceL, TokenType.braceBarL, TokenType.dollarBraceL]);
+const CLOSERS = new Set([TokenType.parenR, TokenType.bracketR, TokenType.braceR, TokenType.braceBarR]);
 
 /** JSX 글자는 줄바꿈과 앞뒤 공백을 접어서 보여 준다. */
 function jsxTextValue(raw: string): string {

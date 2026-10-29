@@ -70,6 +70,24 @@ describe('editing canvas text in the document (TASK-3)', () => {
     expect(canvasLiterals(edited)[0]!.value).toBe('FE');
   });
 
+  it('groups text written inside the same brackets', () => {
+    const rows = [
+      'const ROWS = [',
+      '  ["예측 가치 ↑", "pCVR"],',
+      '  { name: "팩 후기", reason: "예측 가치 ↑", roas: { prev: "702%" } },',
+      '  { name: "앰플", reason: "예측 가치 ↑" },',
+      '];',
+    ].join('\n');
+    const byValue = (v: string) => canvasLiterals(rows).filter((l) => l.value === v);
+    const [a, b, c] = byValue('예측 가치 ↑');
+    expect(a!.group).toBe(byValue('pCVR')[0]!.group);
+    expect(b!.group).toBe(byValue('팩 후기')[0]!.group);
+    expect(c!.group).toBe(byValue('앰플')[0]!.group);
+    expect(new Set([a!.group, b!.group, c!.group]).size).toBe(3);
+    // 안쪽 객체의 글자는 따로 묶인다.
+    expect(byValue('702%')[0]!.group).not.toBe(b!.group);
+  });
+
   it('refuses an edit when the file changed in the meantime', () => {
     expect(applyDocEdit('abc', 'abc', 1, 2, 'X')).toBe('aXc');
     expect(applyDocEdit('abcd', 'abc', 1, 2, 'X')).toBeUndefined();
