@@ -18,6 +18,8 @@ import { BoardRepository } from '../../src/storage/repository';
 import { stub } from '../stubs/vscode';
 
 const FAKE = path.resolve('test/fixtures/fake-agent.mjs');
+/** 이 기기에 Cursor CLI가 있어도 테스트에서는 없는 것으로 본다. */
+const NO_CLI = path.resolve('test/fixtures/no-such-cli');
 
 class FakeBoard implements BoardAccess {
   readonly cards = new Map<string, Card>();
@@ -106,7 +108,7 @@ beforeEach(async () => {
   repo = new BoardRepository(root, 'en');
   await repo.init();
   board = new FakeBoard(repo);
-  service = new RunService(board, new RunStore(repo.localDir), path.resolve('dist/hook.js'), () => ({ claude: FAKE }));
+  service = new RunService(board, new RunStore(repo.localDir), path.resolve('dist/hook.js'), () => ({ claude: FAKE, cursor: NO_CLI }));
   await service.init();
   stub.answers = [];
   stub.messages = [];
