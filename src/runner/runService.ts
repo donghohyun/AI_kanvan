@@ -9,6 +9,7 @@ import type { ParsedEvent } from '../adapters/types';
 import {
   ACTIVE,
   TERMINAL,
+  resolveRun,
   applyEvent,
   latestRunStatus,
   nextLoopStep,
@@ -584,7 +585,8 @@ export class RunService implements RunsBridge, vscode.Disposable {
 
   // ---- 이벤트 반영 ----
 
-  async dispatch(event: AgentEvent): Promise<void> {
+  async dispatch(incoming: AgentEvent): Promise<void> {
+    const event = await this.followRebind(incoming);
     const { effects, changed } = await this.serial(async () => {
       await this.store.appendEvent(event);
       const result = applyEvent(this.state, event);
@@ -615,6 +617,23 @@ export class RunService implements RunsBridge, vscode.Disposable {
       else if (effect.kind === 'unmatched' && !isLinkedEvent(effect.event)) await this.handleUnmatched(effect.event);
     }
     this.board.refresh();
+  }
+
+  /**
+   * 세션을 다른 카드로 옮겼으면(세션 선택) 그 뒤 이벤트는 옮긴 카드의 새 회차로 보내고, 이전 카드의 회차는 끝낸다.
+   * 회차는 세션 ID로 찾으므로, 옮긴 카드에 회차가 없으면 이벤트가 계속 이전 카드에 쌓인다.
+   */
+  private async followRebind(event: AgentEvent): Promise<AgentEvent> {
+    if (event.runId || !event.toolSessionId) return event;
+    const run = resolveRun(this.state, event);
+    const bound = this.findBoundCard(event.tool, event.toolSessionId);
+    if (!run || !bound || (run.cardId === bound.cardId && run.role === bound.role)) return event;
+    await this.attachExternal(bound.cardId, bound.role, event.tool, event.toolSessionId, event.occurredAt);
+    if (!TERMINAL.has(run.status)) {
+      await this.serial(() => this.updateRun(run.cardId, run.runId, { status: 'ended', endedAt: event.occurredAt, statusDetail: this.board.t('msg.sessionMoved', { id: bound.cardId }) }));
+    }
+    const target = this.latestRun(bound.cardId, bound.role);
+    return target ? { ...event, cardId: bound.cardId, runId: target.runId } : event;
   }
 
   private async rebaseStatusVersion(cardId: string, runId: string): Promise<void> {

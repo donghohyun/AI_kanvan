@@ -4,7 +4,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { claudeAdapter } from '../../src/adapters/claude';
 import { progressOf } from '../../src/core/checklist';
 import type { RunRecord } from '../../src/core/runs';
 import { moveCard } from '../../src/core/status';
@@ -375,6 +376,33 @@ describe('recovery and sessions', () => {
     stub.answers = [{ label: other.id }, { role: 'implementer' }];
     await service.handle({ type: 'linkSession', tool: 'claude', sessionId: 'EXT' });
     expect(stub.messages.some((m) => m.text.includes('already bound to TASK-1'))).toBe(true);
+  });
+  it('sends later events of a session picked for another card to that card (pickSession)', async () => {
+    const first = await newCard({ implementer: 'claude' });
+    const second = await newCard({ implementer: 'claude' });
+    const inbox = new RunStore(repo.localDir).inboxDir;
+    await fs.mkdir(inbox, { recursive: true });
+    const write = (name: string, input: unknown) =>
+      fs.writeFile(path.join(inbox, `${name}.json`), JSON.stringify({ tool: 'claude', receivedAt: new Date().toISOString(), input }));
+    stub.answers = [{ label: first.id }, { role: 'implementer' }];
+    await service.handle({ type: 'linkSession', tool: 'claude', sessionId: 'MOVE' });
+    await write('000000000000001-a', { hook_event_name: 'UserPromptSubmit', session_id: 'MOVE', prompt: 'first' });
+    await service.processInbox();
+
+    // 이전 카드에서 연결을 풀고, 다음 카드에서 같은 세션을 고른다.
+    await service.handle({ type: 'newSession', dir: first.id, role: 'implementer' });
+    const spy = vi.spyOn(claudeAdapter, 'listSessions').mockResolvedValue([{ id: 'MOVE', updatedAt: new Date().toISOString() }]);
+    stub.answers = [{ label: 'MOVE' }];
+    await service.handle({ type: 'pickSession', dir: second.id, role: 'implementer' });
+    spy.mockRestore();
+    await write('000000000000002-b', { hook_event_name: 'Stop', session_id: 'MOVE', last_assistant_message: '두 번째 카드 작업' });
+    await service.processInbox();
+
+    const [old] = await runsOf(first.id);
+    const [moved] = await runsOf(second.id);
+    expect(old).toMatchObject({ status: 'ended' });
+    expect(old!.summary).toBeUndefined();
+    expect(moved).toMatchObject({ external: true, toolSessionId: 'MOVE', summary: '두 번째 카드 작업' });
   });
 });
 
