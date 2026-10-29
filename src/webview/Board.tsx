@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { localDate, overdueDays } from '../core/board';
 import { formatProgress } from '../core/checklist';
-import { KANBAN_STATUSES, type Card, type Category, type KanbanStatus, type RunStatus, type ToolId } from '../core/types';
+import { KANBAN_STATUSES, type Card, type Category, type KanbanStatus, type ToolId } from '../core/types';
 import type { BoardState, CardSession } from '../shared/protocol';
-import { categoriesOf, matchesFilter, placedCards, shortDate, type BoardFilter, type Placed } from './cards';
+import { ATTENTION, categoriesOf, elapsed, matchesFilter, placedCards, shortDate, type BoardFilter, type Placed } from './cards';
+import { BranchIcon, LinkIcon, RunIcon, StatusIcon } from './icons';
 import { send, useT } from './vscode';
 
 type Props = { state: BoardState; filter: BoardFilter; onSelect: (dir: string) => void };
@@ -99,7 +100,8 @@ export function Board({ state, filter, onSelect }: Props) {
           }}
         >
           <header className="column-header">
-            <span>
+            <span className="column-title">
+              <StatusIcon status={status} />
               {t(`status.${status}`)}
               {status === 'done' && filter.doneSince && (
                 <span className="muted"> · {t('column.since', { date: shortDate(filter.doneSince) })}</span>
@@ -172,9 +174,23 @@ function CardTile({
   const overdue = overdueDays(card, today);
   const pct = progress.total ? (progress.done / progress.total) * 100 : 0;
   const deps = (card.dependsOn ?? []).map((id) => ({ id, card: dependency(id) })).filter((d) => d.card);
+  const tone = view.sessions.some((x) => x.status === 'error' || x.status === 'unknown')
+    ? 'failed'
+    : view.sessions.some((x) => x.status === 'input_required')
+      ? 'attention'
+      : view.sessions.some((x) => x.status === 'running' || x.status === 'stopping')
+        ? 'running'
+        : '';
+  const activity = view.activity;
+  const activityText = activity?.file
+    ? t('activity.editing', { file: activity.file })
+    : activity?.verdict
+      ? t(activity.verdict === 'pass' ? 'runs.reviewPass' : 'runs.reviewChanges')
+      : activity?.text;
+  const since = activity && elapsed(activity.at);
   return (
     <article
-      className="card"
+      className={`card${tone ? ` ${tone}` : ''}`}
       data-card-id={card.id}
       tabIndex={0}
       draggable
@@ -193,45 +209,21 @@ function CardTile({
       }}
     >
       <div className="card-head">
-        <span className="card-title">{card.title}</span>
+        <span className="card-title">
+          {activity?.unread && <i className="unread-dot" role="img" aria-label={t('card.unread')} title={t('card.unread')} />}
+          {card.title}
+        </span>
         <span className="card-id">{card.id}</span>
       </div>
-      <div className="card-progress" aria-label={t('detail.progress')}>
-        {progress.total > 0 && (
+      {progress.total > 0 && (
+        <div className="card-progress" aria-label={t('detail.progress')}>
           <div className="bar small">
-            <div className="bar-fill accent" style={{ width: `${pct}%` }} />
+            <div className={`bar-fill ${progress.done === progress.total ? 'ok' : 'accent'}`} style={{ width: `${pct}%` }} />
           </div>
-        )}
-        <span className="card-count">{formatProgress(progress)}</span>
-      </div>
-      {cats.length > 0 && (
-        <div className="card-line">
-          {cats.map((c, i) => (
-            <span key={c.tag} className="cat-tag">
-              {i > 0 && <span className="sep">·</span>}
-              <i className={`dot cat-${c.color}`} aria-hidden />
-              {c.name}
-            </span>
-          ))}
+          <span className="card-count">{formatProgress(progress)}</span>
         </div>
       )}
-      {(card.startDate || card.dueDate) && (
-        <div className="card-line muted">
-          {card.startDate && <span>{t('card.start', { date: shortDate(card.startDate) })}</span>}
-          {card.dueDate && overdue > 0 && (
-            <span className="overdue" title={t('card.overdueTitle', { n: overdue })}>
-              {card.startDate && ' · '}
-              {t('card.overdue', { n: overdue })}
-            </span>
-          )}
-          {card.dueDate && overdue === 0 && card.status !== 'done' && (
-            <span>
-              {card.startDate && ' · '}
-              {t('card.due', { date: shortDate(card.dueDate) })}
-            </span>
-          )}
-        </div>
-      )}
+      <CardMeta view={view} cats={cats} overdue={overdue} />
       {deps.map(({ id, card: dep }) => (
         <button
           key={id}
@@ -242,11 +234,23 @@ function CardTile({
             openCard(id);
           }}
         >
-          <span aria-hidden>⛓ </span>
+          <LinkIcon />
           {t('card.depends', { title: dep!.title })}
         </button>
       ))}
-      <AgentChips dir={view.dir} sessions={view.sessions} />
+      {(view.sessions.length > 0 || activityText) && (
+        <div className="card-foot">
+          {activityText && (
+            <div className="card-activity" title={activityText}>
+              {activityText}
+            </div>
+          )}
+          <div className="card-foot-row">
+            <AgentChips dir={view.dir} sessions={view.sessions} />
+            {since && <span className="card-time">{t(`time.${since.unit}`, { n: since.n })}</span>}
+          </div>
+        </div>
+      )}
       {(view.rereviewRequired || view.duplicate || card.manualDone || view.worktreeMissing) && (
         <div className="card-badges">
           {view.rereviewRequired && <span className="badge warn">{t('card.rereview')}</span>}
@@ -259,39 +263,74 @@ function CardTile({
   );
 }
 
-const TOOL_GLYPH: Record<ToolId, string> = { claude: '✳', codex: '◎', cursor: '➤' };
-
-/** DS-9: 상태 점 색 */
-function dotTone(status: RunStatus): string {
-  if (status === 'running') return 'ok';
-  if (status === 'input_required' || status === 'stopping') return 'warn';
-  if (status === 'error' || status === 'unknown') return 'error';
-  return 'idle';
+/** 카드 정보 줄: 날짜 · 구분 · 브랜치. 세 가지까지만 보인다. */
+function CardMeta({ view, cats, overdue }: { view: Placed; cats: Category[]; overdue: number }) {
+  const t = useT();
+  const { card } = view;
+  const date =
+    card.dueDate && overdue > 0 ? (
+      <span className="overdue" title={t('card.overdueTitle', { n: overdue })}>
+        {t('card.overdue', { n: overdue })}
+      </span>
+    ) : card.dueDate && card.status !== 'done' ? (
+      <span>{t('card.due', { date: shortDate(card.dueDate) })}</span>
+    ) : card.startDate && card.status !== 'done' ? (
+      <span>{t('card.start', { date: shortDate(card.startDate) })}</span>
+    ) : undefined;
+  // 기본 브랜치(task/<ID>)는 ID와 같은 정보라 감춘다.
+  const branch = card.workspace?.branch === `task/${card.id}` ? undefined : card.workspace?.branch;
+  if (!date && cats.length === 0 && !branch) return null;
+  return (
+    <div className="card-meta">
+      {date}
+      {cats.length > 0 && (
+        <span className="cat-tags">
+          {cats.map((c) => (
+            <span key={c.tag} className="cat-tag">
+              <i className={`dot cat-${c.color}`} aria-hidden />
+              {c.name}
+            </span>
+          ))}
+        </span>
+      )}
+      {branch && (
+        <span className="branch" title={branch}>
+          <BranchIcon />
+          {branch}
+        </span>
+      )}
+    </div>
+  );
 }
 
-/** DS-9: 에이전트 칩. 누르면 그 세션을 연다. */
+const TOOL_GLYPH: Record<ToolId, string> = { claude: '✳', codex: '◎', cursor: '➤' };
+
+/** DS-9: 에이전트 칩. 도구와 실행 상태를 아이콘으로 보이고, 사람이 볼 상태는 글로도 적는다. 누르면 그 세션을 연다. */
 function AgentChips({ dir, sessions }: { dir: string; sessions: CardSession[] }) {
   const t = useT();
-  if (sessions.length === 0) return null;
+  if (sessions.length === 0) return <span />;
   const shown = sessions.slice(0, MAX_CHIPS);
   return (
     <div className="chips-row">
       {shown.map((s, i) => {
+        const state = t(`run.${s.status}`);
         const body = (
           <>
             <span className="glyph" aria-hidden>
               {TOOL_GLYPH[s.tool]}
             </span>
             {s.tool}
-            <i className={`status-dot ${dotTone(s.status)}`} aria-label={t(`run.${s.status}`)} />
+            <RunIcon status={s.status} label={state} />
+            {ATTENTION.has(s.status) && <span className="chip-state">{t(`chip.${s.status as 'input_required' | 'error' | 'unknown'}`)}</span>}
           </>
         );
-        const title = `${t(`tool.${s.tool}`)} · ${t(`run.${s.status}`)}`;
+        const title = `${t(`tool.${s.tool}`)} · ${state}`;
+        const className = `agent-chip r-${s.status}`;
         const sessionId = s.sessionId;
         return sessionId ? (
           <button
             key={`${s.tool}:${sessionId}`}
-            className="agent-chip"
+            className={className}
             title={`${title} · ${t('card.openSession')} (${sessionId.slice(0, 8)})`}
             onClick={(e) => {
               e.stopPropagation();
@@ -302,7 +341,7 @@ function AgentChips({ dir, sessions }: { dir: string; sessions: CardSession[] })
             {body}
           </button>
         ) : (
-          <span key={`${s.tool}:${i}`} className="agent-chip" title={title}>
+          <span key={`${s.tool}:${i}`} className={className} title={title}>
             {body}
           </span>
         );

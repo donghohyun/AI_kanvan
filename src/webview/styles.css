@@ -1,17 +1,18 @@
 /* VS Code 테마 변수만 사용해 라이트·다크·고대비를 따른다 (N-4). */
 :root {
   --gap: 8px;
-  --radius: 4px;
+  /* 버튼·컬럼·카드가 같은 둥글기를 쓴다. */
+  --radius: 6px;
   /* TASK-2 DS-11: 디자인 토큰 */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-6: 24px;
-  --radius-card: 12px;
+  --radius-card: 6px;
   --radius-pill: 999px;
   --font-metric: 30px;
-  --font-card-title: 15px;
+  --font-card-title: 13px;
   --font-section: 15px;
   --surface: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
   --track: var(--vscode-scrollbarSlider-background, rgba(128, 128, 128, 0.25));
@@ -22,6 +23,14 @@
   --error: var(--vscode-errorForeground);
   --warn: var(--vscode-editorWarning-foreground);
   --ok: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  /* 상태 색. VS Code 차트·테스트 색을 쓰고, 변수가 없는 환경(일부 Cursor 빌드)을 위해 기본값을 둔다. */
+  --c-running: var(--vscode-charts-blue, #3794ff);
+  --c-attention: var(--vscode-charts-orange, #d18616);
+  --c-progress: var(--vscode-charts-yellow, #cca700);
+  --c-review: var(--vscode-charts-green, #89d185);
+  --c-done: var(--vscode-charts-purple, #b180d7);
+  --c-failed: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f14c4c));
+  --hairline: var(--vscode-widget-border, var(--border));
 }
 
 /* DS-12: 구분 8색. 테마마다 배경 대비 3:1 이상 (다크 최소 5.4, 라이트 최소 4.4) */
@@ -117,8 +126,7 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.95em; }
 
 .column {
   background: var(--vscode-sideBar-background, transparent);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-card);
   min-height: 120px;
   display: flex;
   flex-direction: column;
@@ -126,16 +134,17 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.95em; }
 .column-header {
   display: flex;
   justify-content: space-between;
-  padding: 6px var(--gap);
+  align-items: center;
+  padding: var(--space-2) var(--space-3) var(--space-1);
   font-weight: 600;
-  border-bottom: 1px solid var(--border);
 }
+.column-title { display: inline-flex; align-items: center; gap: 6px; }
 .count { color: var(--muted); font-weight: normal; }
 .column-body { padding: 6px; display: flex; flex-direction: column; gap: 6px; }
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
   padding: var(--space-3) var(--space-3);
   cursor: grab;
@@ -143,11 +152,26 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.95em; }
   flex-direction: column;
   gap: var(--space-2);
 }
+.card:hover { border-color: color-mix(in srgb, var(--vscode-foreground) 25%, transparent); }
 .card.selected { border-color: var(--focus); }
+/* 실행 중은 파란 줄, 사람이 볼 카드는 주황 줄과 테두리 */
+.card.running { box-shadow: inset 3px 0 0 var(--c-running); }
+.card.attention { box-shadow: inset 3px 0 0 var(--c-attention); border-color: color-mix(in srgb, var(--c-attention) 55%, transparent); }
+.card.failed { box-shadow: inset 3px 0 0 var(--c-failed); border-color: color-mix(in srgb, var(--c-failed) 55%, transparent); }
 .card.dragging { opacity: 0.4; }
 .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
 .card-id { font-family: var(--vscode-editor-font-family); font-size: 0.85em; color: var(--muted); white-space: nowrap; }
-.card-title { font-size: var(--font-card-title); font-weight: 600; word-break: break-word; }
+.card-title { font-size: var(--font-card-title); font-weight: 600; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.35; }
+.unread-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c-running); margin-right: 6px; vertical-align: 2px; }
+.card-meta { display: flex; align-items: center; gap: var(--space-3); color: var(--muted); font-size: 0.92em; min-width: 0; }
+.card-meta > * { display: inline-flex; align-items: center; gap: var(--space-1); white-space: nowrap; }
+.card-meta .branch { overflow: hidden; text-overflow: ellipsis; min-width: 0; display: inline-block; }
+.card-meta .branch .icon { margin-right: 3px; vertical-align: -2px; }
+.cat-tags { gap: var(--space-2); }
+.card-foot { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--hairline); padding-top: var(--space-2); }
+.card-activity { color: var(--muted); font-size: 0.92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-foot-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.card-time { color: var(--muted); font-size: 0.85em; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .card-progress { display: flex; align-items: center; gap: var(--space-2); }
 .card-progress .bar { flex: 1; }
 .card-count { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -158,6 +182,9 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.95em; }
 .overdue { color: var(--error); font-weight: 600; }
 .card-dep {
   all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   cursor: pointer;
   color: var(--muted);
   font-size: 0.92em;
@@ -169,33 +196,51 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.95em; }
 .agent-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 10px;
+  gap: 5px;
+  padding: 1px 8px;
   border-radius: var(--radius-pill);
-  background: var(--vscode-badge-background, var(--track));
-  color: var(--vscode-badge-foreground, inherit);
-  font-size: 0.9em;
+  background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  color: var(--vscode-foreground);
+  font-size: 0.88em;
+  white-space: nowrap;
 }
-.agent-chip .glyph { opacity: 0.85; }
+.agent-chip .glyph { opacity: 0.7; }
+.agent-chip.r-input_required { background: color-mix(in srgb, var(--c-attention) 18%, transparent); }
+.agent-chip.r-error, .agent-chip.r-unknown { background: color-mix(in srgb, var(--c-failed) 18%, transparent); }
+.chip-state { font-weight: 600; }
+.agent-chip.r-input_required .chip-state { color: var(--c-attention); }
+.agent-chip.r-error .chip-state, .agent-chip.r-unknown .chip-state { color: var(--c-failed); }
 button.agent-chip {
   border: 0;
   font-family: inherit;
   cursor: pointer;
-  background: var(--vscode-badge-background, var(--track));
-  color: var(--vscode-badge-foreground, inherit);
 }
-button.agent-chip:hover { filter: brightness(1.2); }
+button.agent-chip:hover { background: color-mix(in srgb, var(--vscode-foreground) 16%, transparent); }
 button.agent-chip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--muted); }
-.status-dot.ok { background: var(--ok); }
-.status-dot.warn { background: var(--warn); }
-.status-dot.error { background: var(--error); }
+
+/* 아이콘 */
+.icon { flex: none; display: inline-block; vertical-align: -2px; }
+button .icon { margin-right: 4px; }
+.status-icon { color: var(--muted); }
+.status-icon.s-in_progress { color: var(--c-progress); }
+.status-icon.s-review { color: var(--c-review); }
+.status-icon.s-done { color: var(--c-done); }
+.run-icon { color: var(--muted); }
+.run-icon.r-running { color: var(--c-running); }
+.run-icon.r-input_required { color: var(--c-attention); }
+.run-icon.r-stopping { color: var(--c-progress); }
+.run-icon.r-ended { color: var(--ok); }
+.run-icon.r-error, .run-icon.r-unknown { color: var(--c-failed); }
+.spin { transform-origin: 8px 8px; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
 /* 진행 막대 */
 .bar { height: 6px; border-radius: var(--radius-pill); background: var(--track); overflow: hidden; }
 .bar.small { height: 4px; }
 .bar-fill { height: 100%; background: var(--cat, var(--accent)); border-radius: inherit; }
 .bar-fill.accent { background: var(--accent); }
+.bar-fill.ok { background: var(--ok); }
 .card-badges { display: flex; flex-wrap: wrap; gap: 4px; }
 .drop-line { height: 2px; background: var(--focus); border-radius: 1px; }
 
@@ -350,6 +395,8 @@ pre.text, pre.diff {
   border: 1px solid var(--border);
   color: var(--vscode-foreground);
 }
+.chip.attention { color: var(--c-attention); border-color: color-mix(in srgb, var(--c-attention) 60%, transparent); }
+.chip.attention.active { background: color-mix(in srgb, var(--c-attention) 20%, transparent); color: var(--c-attention); }
 .chip.active { background: var(--vscode-list-activeSelectionBackground, var(--track)); color: var(--vscode-list-activeSelectionForeground, inherit); border-color: transparent; }
 .done-since { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: var(--space-2); }
 

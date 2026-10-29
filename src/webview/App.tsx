@@ -4,6 +4,7 @@ import { Board } from './Board';
 import type { BoardFilter } from './cards';
 import { CardPage } from './Detail';
 import { Filters } from './Filters';
+import { GearIcon } from './icons';
 import { Settings } from './Settings';
 import { SharedDocPage } from './SharedDocPage';
 import { SharedDocsBar } from './SharedDocsBar';
@@ -76,7 +77,7 @@ function BoardHeader({ onSettings }: { onSettings: () => void }) {
     <header className="board-header">
       <h1>Agent Board</h1>
       <button onClick={onSettings} aria-label={t('settings.open')}>
-        <span aria-hidden>⚙ </span>
+        <GearIcon />
         {t('settings.open')}
       </button>
     </header>

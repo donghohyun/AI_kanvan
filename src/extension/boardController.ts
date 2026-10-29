@@ -231,6 +231,7 @@ export class BoardController implements BoardAccess, vscode.Disposable {
       tags: c.tags,
       hasCanvas: c.hasCanvas,
       sessions: c.card ? this.runs.cardSessions(c.card.id) : [],
+      activity: c.card ? this.runs.cardActivity(c.card.id) : undefined,
     }));
     return {
       initialized: this.initialized,

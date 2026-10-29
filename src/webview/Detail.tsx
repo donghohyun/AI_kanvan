@@ -21,6 +21,9 @@ export function CardPage({ view, state, onBack }: { view: CardView; state: Board
   const [tab, setTab] = useState<Tab>('canvas');
   const card = view.card;
 
+  // 카드를 열면 끝난 실행을 본 것으로 한다.
+  useEffect(() => send({ type: 'markSeen', dir: view.dir }), [view.dir]);
+
   // CP-1: 입력 중이 아닐 때 Esc를 누르면 보드로 돌아간다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

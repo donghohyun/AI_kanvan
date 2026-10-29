@@ -2,6 +2,7 @@
 
 import type { TagProgress } from '../core/board';
 import type { ChecklistItem } from '../core/checklist';
+import type { CardActivity } from '../core/activity';
 import type { ImplementerReport, ReportStatus, ToneIssue } from '../core/report';
 import type { ReviewResult } from '../core/runs';
 import type {
@@ -65,6 +66,8 @@ export interface CardView {
   /** plan.md 항목의 구분별 진행률 (TASK-2 CT-2) */
   tags: TagProgress;
   sessions: CardSession[];
+  /** 마지막 활동 한 줄과 확인 안 한 결과 여부 */
+  activity?: CardActivity;
   hasCanvas: boolean;
   duplicate: boolean;
   runStatus: Partial<Record<Role, RunStatus>>;
@@ -135,6 +138,7 @@ export type ToExtension =
   | { type: 'removeSharedDoc'; id: string }
   | { type: 'createDocTask'; id: string }
   | { type: 'loadRuns'; dir: string }
+  | { type: 'markSeen'; dir: string }
   | { type: 'startRun'; dir: string; role: Role; resume: boolean }
   | { type: 'stopRun'; dir: string; role: Role }
   | { type: 'resolveRun'; dir: string; runId: string; status: 'ended' | 'error' }

@@ -162,6 +162,16 @@ export class RunStore {
     await writeFileAtomic(this.sessionsFile, toJson(bindings));
   }
 
+  /** 카드 ID → 사용자가 카드를 마지막으로 연 시각. 끝난 실행을 아직 안 봤는지 가린다. */
+  async loadSeen(): Promise<Record<string, string>> {
+    const text = await readTextIfExists(path.join(this.localDir, 'seen.json'));
+    return text ? (JSON.parse(text) as Record<string, string>) : {};
+  }
+
+  async saveSeen(seen: Record<string, string>): Promise<void> {
+    await writeFileAtomic(path.join(this.localDir, 'seen.json'), toJson(seen));
+  }
+
   async loadUnlinked(): Promise<UnlinkedSession[]> {
     const text = await readTextIfExists(this.unlinkedFile);
     return text ? (JSON.parse(text) as UnlinkedSession[]) : [];

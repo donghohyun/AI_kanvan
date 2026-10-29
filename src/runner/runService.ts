@@ -21,6 +21,7 @@ import {
   type RunRecord,
   type RunsState,
 } from '../core/runs';
+import { cardActivity, type CardActivity } from '../core/activity';
 import { runText } from '../core/report';
 import { applyRunStatusChange, autoMoveTarget, canAutoDone, type ReviewSummary } from '../core/status';
 import { ROLES, TOOL_IDS, type BoardSettings, type Card, type Progress, type Role, type SharedDoc, type TaskDoc, type ToolId } from '../core/types';
@@ -93,6 +94,7 @@ const CODE_REF_INTERVAL_MS = 3000;
 export class RunService implements RunsBridge, vscode.Disposable {
   private state: RunsState = { runs: [], seenEventIds: [] };
   private sessions: SessionBindings = {};
+  private seen: Record<string, string> = {};
   private unlinked: UnlinkedSession[] = [];
   private toolInfo: ToolInfo[] = [];
   private binaries: Partial<Record<ToolId, string>> = {};
@@ -144,6 +146,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
     this.state = await this.store.loadRuns();
     this.sessions = await this.store.loadSessions().catch(() => ({}));
     this.unlinked = await this.store.loadUnlinked().catch(() => []);
+    this.seen = await this.store.loadSeen().catch(() => ({}));
     this.hookTools = await this.loadHookTools();
     await this.refreshHookScript();
     await this.detectTools();
@@ -217,6 +220,9 @@ export class RunService implements RunsBridge, vscode.Disposable {
     if (!this.ready) return false;
     await this.ready;
     switch (msg.type) {
+      case 'markSeen':
+        await this.markSeen(msg.dir);
+        return true;
       case 'loadRuns':
         await this.postRuns(msg.dir);
         return true;
@@ -1179,6 +1185,20 @@ export class RunService implements RunsBridge, vscode.Disposable {
     }
     const worktree = run?.worktree ? path.resolve(this.board.root, run.worktree) : undefined;
     resumeInTerminal(tool, binary, sessionId, worktree && (await pathExists(worktree)) ? worktree : this.board.root);
+  }
+
+  cardActivity(cardId: string): CardActivity | undefined {
+    return cardActivity(runsOfCard(this.state, cardId), this.seen[cardId], parseReport);
+  }
+
+  /** 카드를 열면 그때까지 끝난 실행을 본 것으로 한다. */
+  private async markSeen(cardId: string): Promise<void> {
+    if (!this.cardActivity(cardId)?.unread) return;
+    await this.serial(async () => {
+      this.seen = { ...this.seen, [cardId]: new Date().toISOString() };
+      await this.store.saveSeen(this.seen);
+    });
+    this.board.refresh();
   }
 
   cardSessions(cardId: string): CardSession[] {

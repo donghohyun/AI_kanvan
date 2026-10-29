@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { lintTone, reportStatus, runText, type ImplementerReport } from '../../src/core/report';
+import { ko } from '../../src/shared/i18n';
 
 const report = (over: Partial<ImplementerReport> = {}): ImplementerReport => ({
   result: 'add 함수 추가',
@@ -68,5 +69,15 @@ describe('runText', () => {
     const reviewed = runText({ summary: '수정할 곳이 있어요.\n```json\n{"verdict":"pass","findings":[]}\n```\n', review: { verdict: 'pass', findings: [] } }, undefined, { done: 0, total: 0 });
     expect(reviewed.summary).toBe('수정할 곳이 있어요.');
     expect(r.review!.findings[0]).toEqual({ message: '수정이 필요해요.', severity: 'high' });
+  });
+});
+
+describe('Korean UI copy', () => {
+  it('passes the tone check without changes', () => {
+    const bad = Object.entries(ko).flatMap(([key, text]) => {
+      const r = lintTone(text);
+      return r.issues.length || r.text !== text.trim() ? [`${key}: ${r.issues.join(',') || r.text}`] : [];
+    });
+    expect(bad).toEqual([]);
   });
 });
