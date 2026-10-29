@@ -413,12 +413,21 @@ export class BoardController implements BoardAccess, vscode.Disposable {
     if (!(await this.repo.isInitialized())) await this.repo.init();
     const todo = this.cards.filter((c) => c.status === 'todo');
     const order = orderBetween(todo.length ? Math.max(...todo.map((c) => c.order)) : undefined, undefined);
-    const card = await this.repo.createCard({ title: trimmed, relatedDocs }, order);
+    let card = await this.repo.createCard({ title: trimmed, relatedDocs }, order);
     // ST-5: 새 카드의 자동 수정·재리뷰 기본값
-    if (!this.settings().defaultAutoReview) return card;
-    const withDefault = { ...card, autoReview: true };
-    await this.repo.saveCard(withDefault);
-    return withDefault;
+    if (this.settings().defaultAutoReview) {
+      card = { ...card, autoReview: true };
+      await this.repo.saveCard(card);
+    }
+    await this.rememberCard(card);
+    return card;
+  }
+
+  /** 다음 reload 전에도 getCard가 새 카드를 찾도록 스냅샷에 넣는다. 없으면 세션 연결이 실패한다 (E-11). */
+  private async rememberCard(card: Card): Promise<void> {
+    if (!this.snapshot || this.snapshot.cards.some((c) => c.card?.id === card.id)) return;
+    const loaded = await this.repo.loadCard(card.id);
+    this.snapshot = { ...this.snapshot, cards: [...this.snapshot.cards, { ...loaded, card }] };
   }
 
   private async updateCard(id: string, patch: CardPatch): Promise<void> {

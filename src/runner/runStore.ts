@@ -1,11 +1,31 @@
 // `.agent-board/local/`의 실행 기록. Git으로 공유하지 않는다 (spec 1.1).
 
-import { promises as fs } from 'node:fs';
+import { createReadStream, promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import * as readline from 'node:readline';
 import { EMPTY_RUNS, replay, type AgentEvent, type RunsState } from '../core/runs';
 import type { Role, ToolId } from '../core/types';
 import { outboxFile } from './outbox';
-import { readTextIfExists, toJson, writeFileAtomic } from '../storage/fsutil';
+import { pathExists, readTextIfExists, toJson, writeFileAtomic } from '../storage/fsutil';
+
+/** 카드를 찾아 회차로 다시 보낸 이벤트의 ID 꼬리 */
+export const LINKED_SUFFIX = ':linked';
+
+export function isLinkedEvent(event: AgentEvent): boolean {
+  return event.eventId.endsWith(LINKED_SUFFIX);
+}
+
+/** 0.0.1의 반복 연결 버그로 `:linked`가 겹겹이 붙은 ID. 실제 이벤트가 아니므로 읽을 때 버린다. */
+const LOOPED = `${LINKED_SUFFIX}${LINKED_SUFFIX}`;
+/** runs.json에서 seenEventIds 배열의 한 항목인 줄. 요약 등 키가 있는 줄은 해당하지 않는다. */
+const LOOPED_ID_LINE = /^\s*"[^"]*:linked:linked[^"]*",?$/;
+
+/** 파일을 한 줄씩 읽는다. 버그로 커진 파일은 문자열 하나에 담을 수 없을 만큼 클 수 있다. */
+async function* readLines(file: string): AsyncGenerator<string> {
+  if (!(await pathExists(file))) return;
+  const lines = readline.createInterface({ input: createReadStream(file, 'utf8'), crlfDelay: Infinity });
+  for await (const line of lines) yield line;
+}
 
 export interface SessionBinding {
   tool: ToolId;
@@ -71,32 +91,57 @@ export class RunStore {
     return path.join(this.localDir, 'runs', cardId);
   }
 
-  /** H-5: 스냅샷을 읽고 이벤트 로그를 다시 적용한다. 이미 처리한 이벤트는 eventId로 걸러진다. */
+  /**
+   * H-5: 스냅샷을 읽고 이벤트 로그를 다시 적용한다. 이미 처리한 이벤트는 eventId로 걸러진다.
+   * 반복 연결 버그로 쌓인 항목이 있으면 버리고 두 파일을 다시 쓴다.
+   */
   async loadRuns(): Promise<RunsState> {
-    const text = await readTextIfExists(this.runsFile);
+    let looped = false;
+    const kept: string[] = [];
+    for await (const line of readLines(this.runsFile)) {
+      // toJson은 seenEventIds를 한 줄에 하나씩 쓴다. 실행 기록 필드에는 이벤트 ID가 없다.
+      if (LOOPED_ID_LINE.test(line)) looped = true;
+      else kept.push(line);
+    }
     let state: RunsState = EMPTY_RUNS;
-    if (text) {
+    if (kept.length > 0) {
       try {
-        state = JSON.parse(text) as RunsState;
+        // 지운 줄이 배열의 마지막이었으면 앞 줄의 쉼표가 남는다.
+        state = JSON.parse(kept.join('\n').replace(/,(\s*\])/g, '$1')) as RunsState;
       } catch {
         state = EMPTY_RUNS;
       }
     }
-    return replay(state, await this.loadEvents());
+    const { events, dropped } = await this.readEvents();
+    const next = replay(state, events);
+    if (dropped > 0) await this.rewriteEvents(events);
+    if (looped || dropped > 0) await this.saveRuns(next);
+    return next;
   }
 
   async loadEvents(): Promise<AgentEvent[]> {
-    const text = (await readTextIfExists(this.eventsFile)) ?? '';
-    return text
-      .split('\n')
-      .filter(Boolean)
-      .flatMap((l) => {
-        try {
-          return [JSON.parse(l) as AgentEvent];
-        } catch {
-          return [];
-        }
-      });
+    return (await this.readEvents()).events;
+  }
+
+  private async readEvents(): Promise<{ events: AgentEvent[]; dropped: number }> {
+    const events: AgentEvent[] = [];
+    let dropped = 0;
+    for await (const line of readLines(this.eventsFile)) {
+      if (!line) continue;
+      let event: AgentEvent;
+      try {
+        event = JSON.parse(line) as AgentEvent;
+      } catch {
+        continue; // 쓰는 도중 끊긴 줄
+      }
+      if (event.eventId.includes(LOOPED)) dropped += 1;
+      else events.push(event);
+    }
+    return { events, dropped };
+  }
+
+  private async rewriteEvents(events: AgentEvent[]): Promise<void> {
+    await writeFileAtomic(this.eventsFile, events.map((e) => `${JSON.stringify(e)}\n`).join(''));
   }
 
   async saveRuns(state: RunsState): Promise<void> {

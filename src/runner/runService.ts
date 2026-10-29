@@ -27,6 +27,7 @@ import type { BoardState, CardSession, RunView, ToExtension, ToolInfo, ToWebview
 import { pathExists, readTextIfExists, toJson, writeFileAtomic } from '../storage/fsutil';
 import { addToExclude, changesSince, codeRef, createWorktree, defaultWorkspace, headCommit, isTracked, mergeBase } from './git';
 import { HOOK_FILES, hookCommand, installHooks } from './hookInstall';
+import { isLinkedEvent, LINKED_SUFFIX } from './runStore';
 import { openInToolUi, resumeInTerminal } from './openSession';
 import { isProcessAlive, spawnAgent, type AgentProcess } from './process';
 import {
@@ -610,7 +611,8 @@ export class RunService implements RunsBridge, vscode.Disposable {
     }
     for (const effect of effects) {
       if (effect.kind === 'runFinished') await this.afterRun(effect.cardId, effect.runId);
-      else if (effect.kind === 'unmatched') await this.handleUnmatched(effect.event);
+      // 연결해서 다시 보낸 이벤트는 다시 연결하지 않는다.
+      else if (effect.kind === 'unmatched' && !isLinkedEvent(effect.event)) await this.handleUnmatched(effect.event);
     }
     this.board.refresh();
   }
@@ -806,7 +808,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
     }
     if (target) {
       await this.attachExternal(target.cardId, target.role, event.tool, event.toolSessionId, event.occurredAt);
-      await this.dispatch({ ...event, eventId: `${event.eventId}:linked`, cardId: target.cardId, runId: this.latestRun(target.cardId, target.role)?.runId });
+      await this.dispatchLinked(event, target.cardId, this.latestRun(target.cardId, target.role)?.runId);
       return;
     }
     // ST-9: 꺼진 도구의 세션은 자동으로 연결하지 않는다.
@@ -815,6 +817,15 @@ export class RunService implements RunsBridge, vscode.Disposable {
       return;
     }
     await this.addUnlinked(event);
+  }
+
+  /**
+   * 카드를 찾은 세션의 이벤트를 그 회차로 다시 보낸다. 회차가 없으면 보내지 않는다.
+   * 회차 없이 보내면 다시 "알 수 없는 세션"이 되어 연결을 끝없이 반복한다.
+   */
+  private async dispatchLinked(event: AgentEvent, cardId: string, runId: string | undefined): Promise<void> {
+    if (!runId || isLinkedEvent(event)) return;
+    await this.dispatch({ ...event, eventId: `${event.eventId}${LINKED_SUFFIX}`, cardId, runId });
   }
 
   private async addUnlinked(event: AgentEvent): Promise<void> {
@@ -862,9 +873,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
         await this.addUnlinked(event);
         return;
       }
-      for (const e of events) {
-        await this.dispatch({ ...e, eventId: `${e.eventId}:linked`, cardId: result.cardId, runId: this.latestRun(result.cardId, 'implementer')?.runId });
-      }
+      for (const e of events) await this.dispatchLinked(e, result.cardId, this.latestRun(result.cardId, 'implementer')?.runId);
     } finally {
       this.linking.delete(key);
     }
@@ -944,7 +953,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
       return { linked: false };
     }
     await this.serial(() => this.bindUnlocked(card!.id, 'implementer', tool, sessionId, true));
-    await this.attachExternal(card.id, 'implementer', tool, sessionId, new Date().toISOString());
+    await this.attachExternal(card.id, 'implementer', tool, sessionId, new Date().toISOString(), card);
     void vscode.window.showInformationMessage(this.board.t(created ? 'msg.autoCreated' : 'msg.autoLinked', params));
     this.board.refresh();
     return { linked: true, cardId: card.id };
@@ -961,8 +970,8 @@ export class RunService implements RunsBridge, vscode.Disposable {
   }
 
   /** 사용자가 직접 시작한 세션을 카드의 실행 회차로 기록한다. */
-  private async attachExternal(cardId: string, role: Role, tool: ToolId, sessionId: string, at: string): Promise<void> {
-    const card = this.board.getCard(cardId);
+  private async attachExternal(cardId: string, role: Role, tool: ToolId, sessionId: string, at: string, known?: Card): Promise<void> {
+    const card = this.board.getCard(cardId) ?? known;
     if (!card) return;
     await this.bind(cardId, role, tool, sessionId, true);
     await this.serial(async () => {

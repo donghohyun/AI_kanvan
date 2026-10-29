@@ -31,7 +31,7 @@ class FakeBoard implements BoardAccess {
   getCard = (id: string) => this.cards.get(id);
   allCards = () => [...this.cards.values()];
   saveCard = async (card: Card) => {
-    this.cards.set(card.id, card);
+    if (!this.staleNewCards || this.cards.has(card.id)) this.cards.set(card.id, card);
     await this.repo.saveCard(card);
   };
   progress = async (id: string) => progressOf(await this.repo.readTaskDoc(id, 'plan'));
@@ -44,10 +44,12 @@ class FakeBoard implements BoardAccess {
     const r = moveCard(this.cards.get(id)!, to, { now: new Date().toISOString(), hasActiveRun: false });
     await this.saveCard(r.card);
   };
+  /** 실제 보드처럼 새 카드가 다음 reload 전까지 getCard에 보이지 않게 한다. */
+  staleNewCards = false;
   createCard = async (title: string) => {
     const order = Math.max(0, ...[...this.cards.values()].map((c) => c.order)) + 1;
     const card = await this.repo.createCard({ title }, order);
-    this.cards.set(card.id, card);
+    if (!this.staleNewCards) this.cards.set(card.id, card);
     return card;
   };
   refresh = () => undefined;
@@ -495,6 +497,18 @@ describe('auto card creation and linking (E-9 ~ E-12)', () => {
     await auto.init();
   });
   afterEach(() => auto.dispose());
+
+  it('links the session even before the board sees the new card, without relinking forever', async () => {
+    board.staleNewCards = true;
+    await classify({ cardId: null, title: '로그 정리', intent: 'x', spec: [], plan: ['a'] });
+    for (const input of session('S9', '로그 정리해줘')) await hook(input);
+    await auto.processInbox();
+
+    expect((await runsOf('TASK-1'))[0]).toMatchObject({ external: true, toolSessionId: 'S9' });
+    const ids = (await store.loadEvents()).map((e) => e.eventId);
+    expect(ids.some((id) => id.endsWith(':linked:linked'))).toBe(false);
+    expect(ids.length).toBeLessThanOrEqual(4);
+  });
 
   it('creates a Todo card from the first request of an unknown session', async () => {
     await classify({ cardId: null, title: '비밀번호 재설정', intent: '재설정 기능', spec: ['메일 링크'], plan: ['API', '화면'] });

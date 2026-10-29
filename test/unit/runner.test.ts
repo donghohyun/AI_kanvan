@@ -231,6 +231,24 @@ describe('RunStore (H-5)', () => {
     expect(state.runs[0]!.status).toBe('running');
     expect(state.seenEventIds).toEqual(['e1']);
   });
+
+  it('drops entries left by the relink loop and rewrites both files', async () => {
+    const store = new RunStore(tmp);
+    const looped = 'h:1:linked:linked:linked';
+    await store.saveRuns({ runs: [], seenEventIds: ['h:0', 'h:1:linked', looped] });
+    const ev = (eventId: string, prompt?: string): AgentEvent => ({
+      eventId, type: 'turn.started', tool: 'claude', toolSessionId: 'S', source: 'hook', seq: 1, occurredAt: '2026-01-01T00:00:01.000Z',
+      ...(prompt ? { payload: { prompt } } : {}),
+    });
+    await store.appendEvent(ev('h:2', 'why does :linked:linked repeat?'));
+    await store.appendEvent(ev(looped));
+    await store.appendEvent(ev(`${looped}:linked`));
+
+    const state = await store.loadRuns();
+    expect(state.seenEventIds).toEqual(['h:0', 'h:1:linked', 'h:2']);
+    expect((await store.loadEvents()).map((e) => e.eventId)).toEqual(['h:2']);
+    expect(await fs.readFile(path.join(tmp, 'runs.json'), 'utf8')).not.toContain(looped);
+  });
 });
 
 describe('parseReview', () => {
