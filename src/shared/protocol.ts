@@ -2,6 +2,8 @@
 
 import type { TagProgress } from '../core/board';
 import type { ChecklistItem } from '../core/checklist';
+import type { ImplementerReport, ReportStatus, ToneIssue } from '../core/report';
+import type { ReviewResult } from '../core/runs';
 import type {
   AgentAssignment,
   BoardConfig,
@@ -27,9 +29,13 @@ export interface RunView {
   endedAt?: string;
   summary?: string;
   verification?: string;
+  /** 구현자가 낸 보고. 상태 라벨은 보드가 정한다. */
+  report?: ImplementerReport & { status: ReportStatus };
+  /** 말투 검사에서 고치지 못한 문제 */
+  tone: ToneIssue[];
   changes?: string[];
   diff?: string;
-  review?: { verdict: 'pass' | 'changes_requested'; findings: { file?: string; line?: number; message: string }[] };
+  review?: ReviewResult;
   reviewedRef?: string;
   transcriptPath?: string;
   statusDetail?: string;

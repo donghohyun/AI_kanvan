@@ -7,6 +7,7 @@ export interface ReviewFinding {
   file?: string;
   line?: number;
   message: string;
+  severity?: 'high' | 'medium' | 'low';
 }
 
 export interface ReviewResult {

@@ -443,3 +443,9 @@ pre.text, pre.diff {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 .literal-choice { text-align: left; white-space: normal; }
+
+/* 실행 이력: 보드가 만든 보고 */
+.report { display: flex; flex-direction: column; gap: var(--space-1); }
+.report ul, .run-detail ul { margin: var(--space-1) 0; padding-left: 18px; }
+.run-detail li { margin: 2px 0; }
+.run-detail li .badge { margin-right: 4px; }

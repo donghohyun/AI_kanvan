@@ -20,6 +20,7 @@ import {
   type RunRecord,
   type RunsState,
 } from '../core/runs';
+import { runText } from '../core/report';
 import { applyRunStatusChange, autoMoveTarget, canAutoDone, type ReviewSummary } from '../core/status';
 import { ROLES, TOOL_IDS, type BoardSettings, type Card, type Progress, type Role, type SharedDoc, type TaskDoc, type ToolId } from '../core/types';
 import type { Locale, MessageKey } from '../shared/i18n';
@@ -42,7 +43,7 @@ import {
   type MatchDecision,
 } from './cardMatcher';
 import { runClassifier } from './classifier';
-import { fixPrompt, implementerPrompt, parseReview, reviewerPrompt, type PromptDocs } from './prompt';
+import { fixPrompt, implementerPrompt, parseReport, parseReview, reviewerPrompt, type PromptDocs } from './prompt';
 import type { RunsBridge } from '../extension/runsBridge';
 import type { RunStore, SessionBindings, UnlinkedSession } from './runStore';
 import { envWithBinary, findBinary, findExecutable, readVersion } from './tools';
@@ -185,6 +186,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
   async runs(cardId: string): Promise<{ runs: RunView[]; sessions: Partial<Record<Role, string>> }> {
     const card = this.board.getCard(cardId);
     const current = card ? await this.hashInputs(card) : {};
+    const progress = await this.board.progress(cardId);
     const runs = runsOfCard(this.state, cardId).map(
       (r): RunView => ({
         runId: r.runId,
@@ -193,11 +195,9 @@ export class RunService implements RunsBridge, vscode.Disposable {
         status: r.status,
         startedAt: r.startedAt,
         endedAt: r.endedAt,
-        summary: r.summary,
-        verification: r.verification,
+        ...runText(r, r.role === 'implementer' ? parseReport(r.summary) : undefined, progress),
         changes: r.changes,
         diff: r.diff,
-        review: r.review,
         reviewedRef: r.reviewedRef,
         transcriptPath: r.transcriptPath,
         statusDetail: r.statusDetail,
