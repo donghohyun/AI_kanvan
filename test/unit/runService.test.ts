@@ -454,7 +454,7 @@ describe('board settings in runs (TASK-2)', () => {
     const card = await newCard({ implementer: 'claude' });
     await service.startRun(card.id, 'implementer', { resume: false });
     const run = await waitFor(async () => (await runsOf(card.id)).find((r) => r.status === 'ended' && r.diff !== undefined));
-    expect(service.cardSessions(card.id)).toEqual([{ tool: 'claude', sessionId: run.toolSessionId, status: 'ended' }]);
+    expect(service.cardSessions(card.id)).toEqual([{ tool: 'claude', sessionId: run.toolSessionId, status: 'ended', at: run.lastSeenAt }]);
   });
 });
 
