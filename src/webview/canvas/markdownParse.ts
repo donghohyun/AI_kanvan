@@ -1,7 +1,7 @@
 // Markdown 파싱 (TASK-3). 그리기는 markdown.tsx가 한다.
 // 블록마다 원문 줄 번호(0부터)를 남겨, 문서 화면에서 절·체크박스를 원문에 바로 고칠 수 있게 한다.
 
-import { HEADING_TAG, headingTags } from '../../core/checklist';
+import { HEADING_TAG, headingTags, unstruck } from '../../core/checklist';
 
 export interface ListItem {
   text: string;
@@ -308,4 +308,17 @@ export function checkboxEdit(source: string, line: number, checked: boolean): Te
   if (!m) return undefined;
   const at = start + m[1]!.length + 1;
   return { start: at, end: at + 1, text: checked ? 'x' : ' ' };
+}
+
+/** 목록 항목 글 전체에 취소선(`~~글~~`)을 긋거나 푼다. 목록 기호·체크박스는 그대로 둔다. */
+export function strikeEdit(source: string, line: number, struck: boolean): TextEdit | undefined {
+  const offsets = lineOffsets(source);
+  const start = offsets[line];
+  if (start === undefined) return undefined;
+  const text = source.slice(start, offsets[line + 1] ?? source.length).replace(/\r?\n$/, '');
+  const m = /^(\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)(.*?)\s*$/.exec(text);
+  if (!m || !m[2]) return undefined;
+  const body = unstruck(m[2]);
+  const at = start + m[1]!.length;
+  return { start: at, end: at + m[2].length, text: struck ? `~~${body}~~` : body };
 }

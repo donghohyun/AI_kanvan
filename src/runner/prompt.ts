@@ -38,6 +38,7 @@ ${docList(card, docs)}
 Work in the current directory${branch ? ` (git worktree on branch ${branch})` : ''}.
 - Follow plan.md in order and satisfy the completion criteria in spec.md.
 - When you fully complete a checklist item, change "- [ ]" to "- [x]" for that item in plan.md (the path above). Never check items you did not finish.
+- Skip checklist items struck through with "~~"; they were dropped.
 - Do not edit intent.md or spec.md.
 
 ${REPORT}`;
