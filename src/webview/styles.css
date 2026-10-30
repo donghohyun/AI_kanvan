@@ -255,6 +255,7 @@ button .icon { margin-right: 4px; }
 }
 .badge.error, .run-error, .run-unknown { color: var(--error); border-color: var(--error); }
 .badge.warn, .run-input_required, .run-stopping { color: var(--warn); border-color: var(--warn); }
+.badge.unread { color: var(--c-running); border-color: var(--c-running); }
 .badge.ok, .run-running { color: var(--ok); border-color: var(--ok); }
 
 .new-card { display: flex; gap: 4px; }
