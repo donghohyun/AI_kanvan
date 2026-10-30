@@ -73,6 +73,10 @@ describe('item categories (CT-1 ~ CT-4)', () => {
     expect(cardCategories(tags, DEFAULT_CATEGORIES).map((c) => c.tag)).toEqual(['BE', 'FE']);
   });
 
+  it('does not count struck-through items in tag progress', () => {
+    expect(tagProgress(parseChecklist('## [BE] API\n- [x] a\n- [ ] ~~b~~\n'))).toEqual({ be: { done: 1, total: 1 } });
+  });
+
   it('sums categories across cards in board order, unclassified last (DS-2)', () => {
     const rows = categoryProgress([{ tags: tagProgress(items) }, { tags: { ml: { done: 1, total: 1 } } }], DEFAULT_CATEGORIES);
     expect(rows.map((r) => [r.category?.tag ?? '—', r.progress.done, r.progress.total])).toEqual([

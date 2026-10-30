@@ -452,6 +452,12 @@ pre.text, pre.diff {
 .md-editable:empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; }
 .md-check { flex: none; display: inline-flex; align-items: center; padding: 3px 0 0; background: none; border: none; cursor: pointer; }
 .md-tasks li { align-items: flex-start; }
+.md-strike { flex: none; display: inline-flex; align-items: center; padding: 3px 2px 0; background: none; border: none; color: var(--muted); cursor: pointer; opacity: 0; }
+.md-tasks li:hover .md-strike,
+.md-strike:focus-visible,
+.md-strike[aria-pressed='true'] { opacity: 1; }
+.md-strike[aria-pressed='true'] { color: var(--vscode-foreground); }
+.checklist del { color: var(--muted); }
 .doc-conflict {
   max-width: 1100px;
   margin: var(--space-2) auto 0;
