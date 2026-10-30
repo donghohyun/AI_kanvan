@@ -140,7 +140,7 @@ describe('computeDAGLayout (CV-3)', () => {
 });
 
 describe('markdown documents (all documents in canvas style)', async () => {
-  const { parseMarkdown, documentBlocks, blockEdit, insertParagraphs, checkboxEdit, splitTag } = await import('../../src/webview/canvas/markdownParse');
+  const { parseMarkdown, documentBlocks, blockEdit, insertParagraphs, checkboxEdit, strikeEdit, splitTag } = await import('../../src/webview/canvas/markdownParse');
   const { sharedDocKind } = await import('../../src/extension/canvasController');
   type Edit = { start: number; end: number; text: string } | undefined;
   const apply = (src: string, e: Edit) => (e ? src.slice(0, e.start) + e.text + src.slice(e.end) : src);
@@ -195,6 +195,18 @@ describe('markdown documents (all documents in canvas style)', async () => {
     const c = checkboxEdit(md, 8, true)!;
     expect(apply(md, c)).toContain('- [x] 둘');
     expect(checkboxEdit(md, 4, true)).toBeUndefined();
+  });
+
+  it('strikes a list item through and back, keeping its marker and checkbox', () => {
+    const md = '- [ ] 하나\n- [x] **둘** \r\n3. 셋\n본문\n';
+    expect(apply(md, strikeEdit(md, 0, true))).toBe('- [ ] ~~하나~~\n- [x] **둘** \r\n3. 셋\n본문\n');
+    expect(apply(md, strikeEdit(md, 1, true))).toBe('- [ ] 하나\n- [x] ~~**둘**~~ \r\n3. 셋\n본문\n');
+    expect(apply(md, strikeEdit(md, 2, true))).toContain('3. ~~셋~~\n');
+    const struck = '- [ ] ~~하나~~\n';
+    expect(apply(struck, strikeEdit(struck, 0, false))).toBe('- [ ] 하나\n');
+    expect(apply(struck, strikeEdit(struck, 0, true))).toBe(struck);
+    expect(strikeEdit(md, 3, true)).toBeUndefined();
+    expect(strikeEdit('- [ ] \n', 0, true)).toBeUndefined();
   });
 
   it('adds text under an empty section or to an empty document', () => {

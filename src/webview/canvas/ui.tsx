@@ -62,7 +62,7 @@ const InText = createContext(false);
 /** `코드`, [링크](url), **굵게**를 처리한다. */
 export function inlineMarkdown(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*/g;
+  const re = /`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|~~(?!~)(.*?[^~])~~/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;
@@ -70,6 +70,7 @@ export function inlineMarkdown(text: string, key: string): ReactNode[] {
     if (m.index > last) out.push(text.slice(last, m.index));
     if (m[1] !== undefined) out.push(<Code key={`${key}-c${i++}`}>{m[1]}</Code>);
     else if (m[4] !== undefined) out.push(<strong key={`${key}-b${i++}`} style={{ fontWeight: 590 }}>{inlineMarkdown(m[4], `${key}-b${i}`)}</strong>);
+    else if (m[5] !== undefined) out.push(<del key={`${key}-s${i++}`}>{inlineMarkdown(m[5], `${key}-s${i}`)}</del>);
     else out.push(<Link key={`${key}-l${i++}`} href={m[3]!}>{m[2]}</Link>);
     last = m.index + m[0].length;
   }

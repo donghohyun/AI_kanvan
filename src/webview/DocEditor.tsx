@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { parseChecklist } from '../core/checklist';
+import { parseChecklist, unstruck } from '../core/checklist';
 import { unknownTags } from '../core/board';
 import type { Category, TaskDoc } from '../core/types';
 import { onMessage, send, useT } from './vscode';
@@ -99,7 +99,7 @@ export function DocEditor({ dir, doc, categories = [] }: { dir: string; doc: Tas
                     send({ type: 'toggleChecklist', dir, line: item.line, text: item.text, checked: e.target.checked })
                   }
                 />
-                {item.text}
+                {item.dropped ? <del>{unstruck(item.text)}</del> : item.text}
               </label>
             </li>
           ))}

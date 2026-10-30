@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ChecklistMismatchError, formatProgress, parseChecklist, progressOf, toggleChecklistItem } from '../../src/core/checklist';
+import { ChecklistMismatchError, formatProgress, parseChecklist, progressOf, toggleChecklistItem, unstruck } from '../../src/core/checklist';
 
 describe('parseChecklist (P-1)', () => {
   it('counts nested items and skips fenced code blocks', () => {
@@ -39,6 +39,14 @@ describe('progress (P-2)', () => {
   it('shows 7/20', () => {
     const md = Array.from({ length: 20 }, (_, i) => `- [${i < 7 ? 'x' : ' '}] item ${i}`).join('\n');
     expect(formatProgress(progressOf(md))).toBe('7/20');
+  });
+
+  it('leaves struck-through items out', () => {
+    const md = ['- [x] done', '- [ ] ~~dropped~~', '- [x] ~~dropped too~~', '- [ ] ~~part~~ only', '- [ ] todo'].join('\n');
+    expect(parseChecklist(md).map((i) => i.dropped)).toEqual([false, true, true, false, false]);
+    expect(formatProgress(progressOf(md))).toBe('1/3');
+    expect(unstruck('~~dropped~~')).toBe('dropped');
+    expect(unstruck('~~a~~ b')).toBe('~~a~~ b');
   });
 
   it('shows a dash when there are no items or no file', () => {
