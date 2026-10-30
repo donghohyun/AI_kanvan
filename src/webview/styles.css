@@ -208,6 +208,7 @@ code { font-family: var(--vscode-editor-font-family); font-size: 0.95em; }
 .agent-chip.r-input_required { background: color-mix(in srgb, var(--c-attention) 18%, transparent); }
 .agent-chip.r-error, .agent-chip.r-unknown { background: color-mix(in srgb, var(--c-failed) 18%, transparent); }
 .chip-state { font-weight: 600; }
+.chip-date { color: var(--muted); font-variant-numeric: tabular-nums; }
 .agent-chip.r-input_required .chip-state { color: var(--c-attention); }
 .agent-chip.r-error .chip-state, .agent-chip.r-unknown .chip-state { color: var(--c-failed); }
 button.agent-chip {

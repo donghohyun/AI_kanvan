@@ -321,6 +321,7 @@ function AgentChips({ dir, sessions }: { dir: string; sessions: CardSession[] })
               {TOOL_GLYPH[s.tool]}
             </span>
             {s.tool}
+            {s.at && <span className="chip-date">{shortDate(localDate(s.at))}</span>}
             <RunIcon status={s.status} label={state} />
             {ATTENTION.has(s.status) && <span className="chip-state">{t(`chip.${s.status as 'input_required' | 'error' | 'unknown'}`)}</span>}
           </>

@@ -8,15 +8,22 @@ export interface ChecklistItem {
   checked: boolean;
   text: string;
   depth: number;
-  /** 가장 가까운 상위 제목의 구분 태그 (TASK-2 CT-1, CT-2). 없으면 미분류 */
+  /** 가장 가까운 상위 제목의 첫 구분 태그 (TASK-2 CT-1, CT-2). 없으면 미분류 */
   tag?: string;
+  /** 같은 제목의 모든 구분 태그. `## [BE][FE] …`면 두 구분에 모두 집계한다 */
+  tags?: string[];
 }
 
 const TASK_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+\[([ xX])\](?=\s|$)\s?(.*)$/;
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
 const HEADING = /^\s{0,3}(#{1,6})\s+(.*)$/;
-/** 제목 맨 앞의 구분 태그. 예: `## [BE] 로그인 API` */
-export const HEADING_TAG = /^\[([A-Za-z0-9_-]{1,20})\]/;
+/** 제목 맨 앞의 구분 태그. 예: `## [BE] 로그인 API`, `## [BE][FE] 로그인` */
+export const HEADING_TAG = /^((?:\[[A-Za-z0-9_-]{1,20}\]\s*)+)/;
+
+export function headingTags(text: string): string[] {
+  const m = HEADING_TAG.exec(text);
+  return m ? [...m[1]!.matchAll(/\[([^\]]+)\]/g)].map((x) => x[1]!) : [];
+}
 
 function splitLines(content: string): string[] {
   return content.split(/\r?\n/);
@@ -26,7 +33,7 @@ export function parseChecklist(content: string): ChecklistItem[] {
   const items: ChecklistItem[] = [];
   let fence: string | null = null;
   // 현재 위치의 제목 계층. 태그 없는 제목은 상위 제목의 태그를 따른다.
-  const headings: { level: number; tag?: string }[] = [];
+  const headings: { level: number; tags?: string[] }[] = [];
   splitLines(content).forEach((raw, line) => {
     const fenceMatch = FENCE.exec(raw);
     if (fenceMatch) {
@@ -43,7 +50,8 @@ export function parseChecklist(content: string): ChecklistItem[] {
     if (h) {
       const level = h[1]!.length;
       while (headings.length && headings.at(-1)!.level >= level) headings.pop();
-      headings.push({ level, tag: HEADING_TAG.exec(h[2]!.trim())?.[1] ?? headings.at(-1)?.tag });
+      const own = headingTags(h[2]!.trim());
+      headings.push({ level, tags: own.length ? own : headings.at(-1)?.tags });
       return;
     }
     const m = TASK_ITEM.exec(raw);
@@ -53,7 +61,8 @@ export function parseChecklist(content: string): ChecklistItem[] {
       checked: m[2] !== ' ',
       text: m[3]!.trim(),
       depth: m[1]!.replace(/\t/g, '    ').length,
-      tag: headings.at(-1)?.tag,
+      tag: headings.at(-1)?.tags?.[0],
+      tags: headings.at(-1)?.tags,
     });
   });
   return items;

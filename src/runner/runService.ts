@@ -1208,14 +1208,15 @@ export class RunService implements RunsBridge, vscode.Disposable {
     const latest = new Map<string, CardSession>();
     for (const run of runsOfCard(this.state, cardId)) {
       const key = `${run.tool}:${run.toolSessionId ?? `run-${run.runId}`}`;
-      latest.set(key, { tool: run.tool, sessionId: run.toolSessionId, status: run.status });
+      latest.delete(key);
+      latest.set(key, { tool: run.tool, sessionId: run.toolSessionId, status: run.status, at: run.lastSeenAt });
     }
     for (const role of ROLES) {
       const b = this.sessions[cardId]?.[role];
       if (b && !latest.has(`${b.tool}:${b.sessionId}`)) latest.set(`${b.tool}:${b.sessionId}`, { tool: b.tool, sessionId: b.sessionId, status: 'waiting' });
     }
     // 카드에는 앞의 몇 개만 보이므로 최근 세션이 앞에 온다.
-    return [...latest.values()].reverse();
+    return [...latest.values()].sort((a, b) => (b.at ?? '\uffff').localeCompare(a.at ?? '\uffff'));
   }
 
   async installHooksCommand(): Promise<void> {
