@@ -824,7 +824,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
   /** E-8: 카드를 알 수 없는 세션의 이벤트. worktree 경로로 카드를 찾고, 못 찾으면 연결 대기 목록에 둔다. */
   private async handleUnmatched(event: AgentEvent): Promise<void> {
     if (!event.toolSessionId) return;
-    let target = this.findBoundCard(event.tool, event.toolSessionId);
+    let target = this.findBoundCard(event.tool, event.toolSessionId) ?? this.findPastRunCard(event.tool, event.toolSessionId);
     const worktreeCard = this.cardOfWorktree(event.payload?.cwd);
     if (!target && worktreeCard) {
       // 같은 도구가 지정됐고 아직 세션이 없는 역할에만 붙인다. 실행 중인 에이전트의 세션을 빼앗지 않는다.
@@ -992,6 +992,11 @@ export class RunService implements RunsBridge, vscode.Disposable {
       }
     }
     return undefined;
+  }
+
+  private findPastRunCard(tool: ToolId, sessionId: string): { cardId: string; role: Role } | undefined {
+    const run = this.state.runs.filter((r) => r.tool === tool && r.toolSessionId === sessionId && this.board.getCard(r.cardId)).at(-1);
+    return run && { cardId: run.cardId, role: run.role };
   }
 
   /** 사용자가 직접 시작한 세션을 카드의 실행 회차로 기록한다. */
