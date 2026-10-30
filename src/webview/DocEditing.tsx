@@ -5,12 +5,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import type { CanvasLiteral, CanvasPayload, DocTarget, ToExtension } from '../shared/protocol';
+import { unstruck } from '../core/checklist';
 import { useHostTheme } from './canvas/host';
 import { FigureBlock } from './canvas/markdown';
 import {
   blockEdit,
   checkboxEdit,
   insertParagraphs,
+  strikeEdit,
   parseMarkdown,
   splitTag,
   type Block,
@@ -47,7 +49,7 @@ export function ConflictBanner({ dir }: { dir: string }) {
   );
 }
 
-/** 화면의 글을 Markdown으로 되돌린다. 굵게·코드·링크와 줄바꿈을 지킨다. */
+/** 화면의 글을 Markdown으로 되돌린다. 굵게·코드·링크·취소선과 줄바꿈을 지킨다. */
 function serialize(node: Node, plain: boolean): string {
   if (node.nodeType === Node.TEXT_NODE) return (node as Text).data.replace(/\u00a0/g, ' ');
   if (!(node instanceof HTMLElement)) return '';
@@ -59,6 +61,7 @@ function serialize(node: Node, plain: boolean): string {
   if (tag === 'STRONG' || tag === 'B') return `**${inner()}**`;
   if (tag === 'EM' || tag === 'I') return `*${inner()}*`;
   if (tag === 'CODE') return `\`${inner()}\``;
+  if (tag === 'DEL' || tag === 'S' || tag === 'STRIKE') return `~~${inner()}~~`;
   if (tag === 'A') return `[${inner()}](${node.getAttribute('href') ?? ''})`;
   return inner();
 }
@@ -122,6 +125,10 @@ function Editable({
           e.preventDefault();
           if (multiline) document.execCommand('insertLineBreak');
           else e.currentTarget.blur();
+        } else if (!plain && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'x') {
+          // 고르던 글에 취소선을 긋는다.
+          e.preventDefault();
+          document.execCommand('strikeThrough');
         }
       }}
       onPaste={(e) => {
@@ -153,11 +160,22 @@ function CheckIcon({ checked }: { checked: boolean }) {
   );
 }
 
+/** 취소선 기호: 가로줄이 지나가는 S */
+function StrikeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden>
+      <path d="M10.8 4.6c-.5-.9-1.5-1.4-2.8-1.4-1.6 0-2.8.8-2.8 2.1 0 .9.5 1.5 1.6 1.9M5.2 11.4c.5.9 1.6 1.4 2.9 1.4 1.7 0 2.9-.9 2.9-2.2 0-.4-.1-.8-.3-1.1" />
+      <path d="M2.8 8h10.4" />
+    </svg>
+  );
+}
+
 interface BlockContext {
   source: string;
   apply: (edit: TextEdit | undefined) => void;
   placeholder: string;
   checkLabel: string;
+  strikeLabel: string;
 }
 
 function BlockView({ block, ctx, emptyAfter }: { block: Block; ctx: BlockContext; emptyAfter?: boolean }) {
@@ -190,7 +208,9 @@ function BlockView({ block, ctx, emptyAfter }: { block: Block; ctx: BlockContext
       const itemKeys = uniqueKeys(block.items, (x) => x.text);
       return (
         <Tag className={tasks ? 'md-tasks' : undefined} style={{ margin: 0, paddingLeft: tasks ? 0 : 20, color: t.text.primary, display: 'flex', flexDirection: 'column', gap: 4, ...canvasTypography.body }}>
-          {block.items.map((item, n) => (
+          {block.items.map((item, n) => {
+            const struck = unstruck(item.text) !== item.text;
+            return (
             <li key={itemKeys[n]} style={{ marginLeft: item.depth * 16, listStyle: tasks ? 'none' : undefined, display: tasks ? 'flex' : undefined, gap: 8 }}>
               {item.checked !== undefined && (
                 <button
@@ -208,10 +228,23 @@ function BlockView({ block, ctx, emptyAfter }: { block: Block; ctx: BlockContext
                 md={item.text}
                 revision={ctx.source}
                 onCommit={(text) => edit(text, { item: n })}
-                style={{ flex: 1, minWidth: 0, color: item.checked ? t.text.tertiary : undefined }}
+                style={{ flex: 1, minWidth: 0, color: item.checked || struck ? t.text.tertiary : undefined }}
               />
+              {item.checked !== undefined && (
+                <button
+                  type="button"
+                  className="md-strike"
+                  title={ctx.strikeLabel}
+                  aria-label={ctx.strikeLabel}
+                  aria-pressed={struck}
+                  onClick={() => ctx.apply(strikeEdit(ctx.source, item.line, !struck))}
+                >
+                  <StrikeIcon />
+                </button>
+              )}
             </li>
-          ))}
+            );
+          })}
         </Tag>
       );
     }
@@ -314,6 +347,7 @@ export function EditableMarkdown({ dir, target, source, options }: { dir: string
     },
     placeholder: t('edit.placeholder'),
     checkLabel: t('edit.check'),
+    strikeLabel: t('edit.strike'),
   };
   if (blocks.length === 0) {
     return (

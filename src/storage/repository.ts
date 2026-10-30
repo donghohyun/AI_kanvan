@@ -3,7 +3,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { tagProgress, type TagProgress } from '../core/board';
-import { parseChecklist } from '../core/checklist';
+import { itemsProgress, parseChecklist } from '../core/checklist';
 import { findDuplicateIds, isTaskId, nextTaskId } from '../core/ids';
 import {
   CARD_SCHEMA_VERSION,
@@ -158,7 +158,7 @@ export class BoardRepository {
 
   async loadCard(dir: string): Promise<LoadedCard> {
     const items = parseChecklist((await readTextIfExists(this.taskDocPath(dir, 'plan'))) ?? '');
-    const progress = { done: items.filter((i) => i.checked).length, total: items.length };
+    const progress = itemsProgress(items);
     const tags = tagProgress(items);
     const hasCanvas = await pathExists(this.canvasPath(dir));
     const text = await readTextIfExists(this.cardFile(dir));

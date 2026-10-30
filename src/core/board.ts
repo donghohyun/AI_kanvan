@@ -12,6 +12,7 @@ export type TagProgress = Record<string, Progress>;
 export function tagProgress(items: ChecklistItem[]): TagProgress {
   const out: TagProgress = {};
   for (const item of items) {
+    if (item.dropped) continue;
     const key = item.tag?.toLowerCase() ?? UNCLASSIFIED;
     const p = (out[key] ??= { done: 0, total: 0 });
     p.total += 1;

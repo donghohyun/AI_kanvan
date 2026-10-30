@@ -7,6 +7,8 @@ export interface ChecklistItem {
   line: number;
   checked: boolean;
   text: string;
+  /** 항목 글 전체에 취소선(`~~글~~`)을 그었다. 하지 않기로 한 항목이라 진행률에서 뺀다. */
+  dropped: boolean;
   depth: number;
   /** 가장 가까운 상위 제목의 구분 태그 (TASK-2 CT-1, CT-2). 없으면 미분류 */
   tag?: string;
@@ -15,6 +17,8 @@ export interface ChecklistItem {
 const TASK_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+\[([ xX])\](?=\s|$)\s?(.*)$/;
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
 const HEADING = /^\s{0,3}(#{1,6})\s+(.*)$/;
+/** 글 전체를 감싼 취소선 */
+const STRUCK = /^~~(?!~)(.*[^~])~~$/;
 /** 제목 맨 앞의 구분 태그. 예: `## [BE] 로그인 API` */
 export const HEADING_TAG = /^\[([A-Za-z0-9_-]{1,20})\]/;
 
@@ -48,10 +52,12 @@ export function parseChecklist(content: string): ChecklistItem[] {
     }
     const m = TASK_ITEM.exec(raw);
     if (!m) return;
+    const text = m[3]!.trim();
     items.push({
       line,
       checked: m[2] !== ' ',
-      text: m[3]!.trim(),
+      text,
+      dropped: STRUCK.test(text),
       depth: m[1]!.replace(/\t/g, '    ').length,
       tag: headings.at(-1)?.tag,
     });
@@ -59,10 +65,20 @@ export function parseChecklist(content: string): ChecklistItem[] {
   return items;
 }
 
+/** 취소선을 그은 글이면 취소선을 뗀 글을, 아니면 그대로 돌려준다. */
+export function unstruck(text: string): string {
+  return STRUCK.exec(text)?.[1] ?? text;
+}
+
+/** 진행률. 취소선을 그은 항목은 세지 않는다. */
+export function itemsProgress(items: ChecklistItem[]): Progress {
+  const live = items.filter((i) => !i.dropped);
+  return { done: live.filter((i) => i.checked).length, total: live.length };
+}
+
 export function progressOf(content: string | undefined): Progress {
   if (content === undefined) return { done: 0, total: 0 };
-  const items = parseChecklist(content);
-  return { done: items.filter((i) => i.checked).length, total: items.length };
+  return itemsProgress(parseChecklist(content));
 }
 
 export function formatProgress(p: Progress): string {
