@@ -1,5 +1,5 @@
 import type { BoardState } from '../shared/protocol';
-import { daysAgo, needsAttention, placedCards, type BoardFilter } from './cards';
+import { UNSORTED_PAGE, daysAgo, needsAttention, pageList, placedCards, type BoardFilter } from './cards';
 import { BellIcon } from './icons';
 import { useT } from './vscode';
 
@@ -8,6 +8,7 @@ export function Filters({ state, filter, onChange }: { state: BoardState; filter
   const t = useT();
   const categories = state.board?.categories ?? [];
   const attention = placedCards(state).filter(needsAttention).length;
+  const pages = pageList(state);
   return (
     <div className="filters">
       {(attention > 0 || filter.attention) && (
@@ -42,6 +43,19 @@ export function Filters({ state, filter, onChange }: { state: BoardState; filter
           </button>
         ))}
       </div>
+      {pages.length > 0 && (
+        <label className="done-since">
+          <span className="muted">{t('filter.page')}</span>
+          <select value={filter.page ?? ''} onChange={(e) => onChange({ ...filter, page: e.target.value || undefined })}>
+            <option value="">{t('filter.allPages')}</option>
+            {pages.map((p) => (
+              <option key={p} value={p}>
+                {p === UNSORTED_PAGE ? t('page.unsorted') : p}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="done-since">
         <span className="muted">{t('filter.doneSince')}</span>
         <input type="date" value={filter.doneSince ?? ''} onChange={(e) => onChange({ ...filter, doneSince: e.target.value || undefined })} />

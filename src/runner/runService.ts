@@ -62,6 +62,8 @@ export interface BoardAccess {
   settings(): BoardSettings;
   /** 이 보드에서 연결할 수 있는 도구 (TASK-2 ST-4) */
   enabledTools(): ToolId[];
+  /** 카드 페이지 목록 (board.json) */
+  pages(): string[];
   sharedDocs(): SharedDoc[];
   taskDocPath(id: string, doc: TaskDoc): string;
   /** 사용자 이동과 같은 규칙으로 카드를 옮긴다. */
@@ -935,8 +937,9 @@ export class RunService implements RunsBridge, vscode.Disposable {
     const cards = await this.cardSummaries();
     const forced = worktreeCardId ?? explicitMatch(prompt, cards);
     const matcher = this.matcherBinary(sessionTool);
-    const text = matcher ? await runClassifier(matcher.tool, matcher.bin, classifierPrompt(prompt, cards)) : undefined;
-    const decision = parseClassifierOutput(text, prompt, cards) ?? fallbackDecision(prompt, cards);
+    const pages = this.board.pages();
+    const text = matcher ? await runClassifier(matcher.tool, matcher.bin, classifierPrompt(prompt, cards, pages)) : undefined;
+    const decision = parseClassifierOutput(text, prompt, cards, pages) ?? fallbackDecision(prompt, cards);
     return forced ? { ...decision, cardId: forced, via: 'explicit' } : decision;
   }
 
@@ -951,7 +954,7 @@ export class RunService implements RunsBridge, vscode.Disposable {
     let card = d.cardId ? this.board.getCard(d.cardId) : await this.board.createCard(d.title);
     if (!card) return { linked: false };
     if (created) {
-      card = { ...card, agents: { ...card.agents, implementer: { tool } }, updatedAt: new Date().toISOString() };
+      card = { ...card, agents: { ...card.agents, implementer: { tool } }, page: d.page, updatedAt: new Date().toISOString() };
       await this.board.saveCard(card);
     }
 

@@ -22,6 +22,19 @@ export interface BoardFilter {
   doneSince?: string;
   /** 사람이 볼 카드만 */
   attention?: boolean;
+  /** 선택한 페이지. UNSORTED_PAGE면 페이지 없는 카드 */
+  page?: string;
+}
+
+/** 페이지 필터에서 페이지 없는 카드를 가리키는 값 */
+export const UNSORTED_PAGE = '\u0000';
+
+/** board.json 순서를 먼저, 그 밖에 카드에만 있는 페이지를 이름 순으로. 미분류는 맨 끝 */
+export function pageList(state: BoardState): string[] {
+  const declared = state.board?.pages ?? [];
+  const used = new Set(placedCards(state).map((c) => c.card.page ?? UNSORTED_PAGE));
+  const extra = [...used].filter((p) => p !== UNSORTED_PAGE && !declared.includes(p)).sort((a, b) => a.localeCompare(b));
+  return [...declared, ...extra, ...(used.has(UNSORTED_PAGE) ? [UNSORTED_PAGE] : [])];
 }
 
 /** 사람의 입력이나 확인이 필요한 실행 상태 */
@@ -45,6 +58,7 @@ export function elapsed(at: string, now = Date.now()): { unit: 'now' | 'minutes'
 export function matchesFilter(view: Placed, filter: BoardFilter, categories: Category[]): boolean {
   if (filter.category && !categoriesOf(view, categories).some((c) => c.tag === filter.category)) return false;
   if (filter.attention && !needsAttention(view)) return false;
+  if (filter.page && (view.card.page ?? UNSORTED_PAGE) !== filter.page) return false;
   if (filter.doneSince && view.card.status === 'done') {
     const at = completedAt(view.card);
     if (!at || localDate(at) < filter.doneSince) return false;

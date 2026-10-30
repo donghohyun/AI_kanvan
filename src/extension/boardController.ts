@@ -185,6 +185,10 @@ export class BoardController implements BoardAccess, vscode.Disposable {
     return this.snapshot?.board.enabledTools ?? [...TOOL_IDS];
   }
 
+  pages(): string[] {
+    return this.snapshot?.board.pages ?? [];
+  }
+
   /** 이 기기 설정 (VS Code 사용자 설정) */
   machineSettings(): MachineSettings {
     const config = vscode.workspace.getConfiguration('agentBoard');
@@ -439,6 +443,7 @@ export class BoardController implements BoardAccess, vscode.Disposable {
     if (patch.description !== undefined) next.description = patch.description || undefined;
     if (patch.relatedDocs !== undefined) next.relatedDocs = patch.relatedDocs;
     if (patch.autoReview !== undefined) next.autoReview = patch.autoReview;
+    if (patch.page !== undefined) next.page = patch.page.trim() || undefined;
     // TASK-2 CD-3, CD-4: 일정과 선행 카드는 검증을 통과해야 저장한다.
     if (patch.startDate !== undefined) next.startDate = patch.startDate || undefined;
     if (patch.dueDate !== undefined) next.dueDate = patch.dueDate || undefined;

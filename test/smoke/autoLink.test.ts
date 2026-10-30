@@ -47,6 +47,7 @@ describe.skipIf(!enabled)('real hooks → auto card', () => {
       progress: async (id) => progressOf(await repo.readTaskDoc(id, 'plan')),
       settings: () => ({ maxReviewIterations: 1, stopTimeoutSec: 10, defaultAutoReview: false }),
         enabledTools: () => ['claude', 'codex', 'cursor'],
+        pages: () => [],
       sharedDocs: () => [],
       taskDocPath: (id, doc) => repo.taskDocPath(id, doc),
       moveByUser: async () => undefined,

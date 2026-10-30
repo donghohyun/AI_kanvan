@@ -38,6 +38,7 @@ export function DefaultCardDocument({ view, state, docs }: { view: CardView; sta
   const meta = [
     card.id,
     t(`status.${card.status}`),
+    card.page,
     card.workspace?.branch ?? t('page.noBranch'),
     card.startDate && t('card.start', { date: shortDate(card.startDate) }),
     card.dueDate && t('card.due', { date: shortDate(card.dueDate) }),

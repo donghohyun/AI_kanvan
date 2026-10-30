@@ -8,7 +8,7 @@ import { GearIcon } from './icons';
 import { Settings } from './Settings';
 import { SharedDocPage } from './SharedDocPage';
 import { SharedDocsBar } from './SharedDocsBar';
-import { CategoryBars, Summary } from './Summary';
+import { CategoryBars, PageBars, Summary } from './Summary';
 import { UnlinkedSessions } from './UnlinkedSessions';
 import { LocaleContext, loadViewState, onMessage, saveViewState, send, useT } from './vscode';
 
@@ -61,6 +61,7 @@ export function App() {
             <UnlinkedSessions state={state} />
             <Summary state={state} />
             <CategoryBars state={state} />
+            <PageBars state={state} filter={viewState.filter} onChange={(filter) => setViewState((v) => ({ ...v, filter }))} />
             <Filters state={state} filter={viewState.filter} onChange={(filter) => setViewState((v) => ({ ...v, filter }))} />
             <Board state={state} filter={viewState.filter} onSelect={openCard} />
             <SharedDocsBar state={state} onOpen={(id) => showView('shared', undefined, id)} />

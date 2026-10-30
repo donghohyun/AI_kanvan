@@ -41,6 +41,7 @@ class FakeBoard implements BoardAccess {
   enabled: ('claude' | 'codex' | 'cursor')[] = ['claude', 'codex', 'cursor'];
   settings = () => ({ maxReviewIterations: this.maxReviewIterations, stopTimeoutSec: 2, defaultAutoReview: false });
   enabledTools = () => this.enabled;
+  pages = () => [];
   sharedDocs = () => [];
   taskDocPath = (id: string, doc: 'intent' | 'spec' | 'plan') => this.repo.taskDocPath(id, doc);
   moveByUser = async (id: string, to: Card['status']) => {

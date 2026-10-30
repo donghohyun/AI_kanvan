@@ -70,6 +70,7 @@ describe.skipIf(combos.length === 0)('real agents', () => {
         progress: async (id) => progressOf(await repo.readTaskDoc(id, 'plan')),
         settings: () => ({ maxReviewIterations: 1, stopTimeoutSec: 10, defaultAutoReview: false }),
         enabledTools: () => ['claude', 'codex', 'cursor'],
+        pages: () => [],
         sharedDocs: () => [],
         taskDocPath: (id, doc) => repo.taskDocPath(id, doc),
         moveByUser: async (id, to) => {

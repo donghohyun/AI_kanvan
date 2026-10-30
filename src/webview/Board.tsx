@@ -279,9 +279,10 @@ function CardMeta({ view, cats, overdue }: { view: Placed; cats: Category[]; ove
     ) : undefined;
   // 기본 브랜치(task/<ID>)는 ID와 같은 정보라 감춘다.
   const branch = card.workspace?.branch === `task/${card.id}` ? undefined : card.workspace?.branch;
-  if (!date && cats.length === 0 && !branch) return null;
+  if (!date && cats.length === 0 && !branch && !card.page) return null;
   return (
     <div className="card-meta">
+      {card.page && <span className="card-page-tag">{card.page}</span>}
       {date}
       {cats.length > 0 && (
         <span className="cat-tags">

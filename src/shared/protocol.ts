@@ -111,6 +111,8 @@ export interface CardPatch {
   startDate?: string;
   dueDate?: string;
   dependsOn?: string[];
+  /** 빈 문자열이면 지운다 */
+  page?: string;
 }
 
 export type ToExtension =

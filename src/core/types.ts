@@ -65,6 +65,8 @@ export interface Card {
   dependsOn?: string[];
   /** Done으로 옮긴 시각. Done에서 나가면 지운다 */
   doneAt?: string;
+  /** 서비스 화면 단위 묶음 (예: MA Hub 대시보드 이름). 없으면 미분류 */
+  page?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -105,6 +107,8 @@ export interface BoardConfig {
   categories: Category[];
   /** 이 보드에서 연결할 수 있는 에이전트 도구 */
   enabledTools: ToolId[];
+  /** 카드 페이지 목록. 보드 표시 순서이며 카드 자동 생성 때 고를 수 있는 값이다 */
+  pages?: string[];
 }
 
 export const DEFAULT_SETTINGS: BoardSettings = {

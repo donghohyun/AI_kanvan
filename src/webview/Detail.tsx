@@ -3,7 +3,7 @@ import { localDate } from '../core/board';
 import { formatProgress } from '../core/checklist';
 import { ROLES, TASK_DOCS, TOOL_IDS, type Card, type Role, type TaskDoc, type ToolId } from '../core/types';
 import type { BoardState, CardPatch, CardView } from '../shared/protocol';
-import { categoriesOf, placedCards } from './cards';
+import { UNSORTED_PAGE, categoriesOf, pageList, placedCards } from './cards';
 import { CanvasTab } from './CanvasTab';
 import { DocEditor } from './DocEditor';
 import { Runs } from './Runs';
@@ -141,6 +141,25 @@ function Overview({ view, card, state }: { view: CardView; card: Card; state: Bo
         </div>
         <span className="muted small">{t('detail.categoriesHint')}</span>
       </div>
+
+      <label className="field">
+        <span>{t('detail.page')}</span>
+        <input
+          key={card.page ?? ''}
+          list="agent-board-pages"
+          defaultValue={card.page ?? ''}
+          onBlur={(e) => e.target.value.trim() !== (card.page ?? '') && update({ page: e.target.value })}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        />
+        <datalist id="agent-board-pages">
+          {pageList(state)
+            .filter((p) => p !== UNSORTED_PAGE)
+            .map((p) => (
+              <option key={p} value={p} />
+            ))}
+        </datalist>
+        <span className="muted small">{t('detail.pageHint')}</span>
+      </label>
 
       <div className="field-row">
         <label className="field">

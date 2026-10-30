@@ -39,6 +39,13 @@ describe('matching (E-10)', () => {
     expect(parseClassifierOutput('no json', 'p', cards)).toBeUndefined();
   });
 
+  it('keeps only a page from the board list', () => {
+    const pages = ['SSF 데일리 리포트', '데드페이지 검출'];
+    expect(parseClassifierOutput('{"cardId":null,"title":"t","page":"데드페이지 검출"}', 'p', cards, pages)?.page).toBe('데드페이지 검출');
+    expect(parseClassifierOutput('{"cardId":null,"title":"t","page":"없는 페이지"}', 'p', cards, pages)?.page).toBeUndefined();
+    expect(classifierPrompt('p', cards, pages)).toContain('- 데드페이지 검출');
+  });
+
   it('lists cards in the classifier prompt', () => {
     const text = classifierPrompt('결제 실패 처리', cards);
     expect(text).toContain('TASK-2 [todo] 결제 연동');

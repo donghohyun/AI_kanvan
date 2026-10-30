@@ -383,6 +383,27 @@ pre.text, pre.diff {
 .category-row { display: flex; flex-direction: column; gap: 6px; }
 .category-row-head { display: flex; justify-content: space-between; gap: var(--space-2); }
 
+.page-bars { padding-bottom: var(--space-4); border-bottom: 1px solid var(--border); margin-bottom: var(--space-4); }
+.page-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--space-2); }
+.page-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card, 6px);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.page-cell:hover { background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent); }
+.page-cell.active { background: var(--vscode-list-activeSelectionBackground, var(--track)); color: var(--vscode-list-activeSelectionForeground, inherit); border-color: transparent; }
+.page-name { font-weight: 600; }
+.card-page-tag { color: var(--muted); }
+
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .chip {

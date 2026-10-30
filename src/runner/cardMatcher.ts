@@ -21,6 +21,8 @@ export interface MatchDecision {
   spec: string[];
   /** 새 카드면 초기 체크리스트, 기존 카드면 새로 추가할 항목 */
   plan: string[];
+  /** 새 카드의 페이지. 보드 페이지 목록에 있는 값만 */
+  page?: string;
   /** 판단 방법 */
   via: 'explicit' | 'classifier' | 'keyword';
 }
@@ -79,17 +81,18 @@ You receive the board's open cards and a request that a developer just sent to a
 Decide whether the request continues one of the existing cards or is a new task, and prepare the task documents.
 
 Reply with ONLY one JSON object and nothing else:
-{"cardId": "<existing card id or null>", "title": "<short task title>", "intent": "<one paragraph>", "spec": ["<requirement>"], "plan": ["<checklist item>"]}
+{"cardId": "<existing card id or null>", "title": "<short task title>", "intent": "<one paragraph>", "spec": ["<requirement>"], "plan": ["<checklist item>"], "page": "<page name or null>"}
 
 Rules:
 - Use an existing cardId only if the request clearly continues that card's work. Otherwise use null.
 - If cardId is null: title, intent, spec and plan are the initial contents of a new card.
+- page is the product screen the new card is about, copied exactly from the Pages list. Use null if no page fits or the list is empty.
 - If cardId is set: intent summarizes only the added request; spec and plan contain only NEW requirements and checklist items (they may be empty).
 - A question that asks for no change is still a task: describe what to find out.
 - Write in the same language as the request. Keep checklist items short and concrete.`;
 
 /** 분류기에 보내는 내용: 열린 카드 목록과 요청. */
-export function classifierPrompt(prompt: string, cards: CardSummary[]): string {
+export function classifierPrompt(prompt: string, cards: CardSummary[], pages: string[] = []): string {
   const list = cards.length
     ? cards
         .map((c) => `- ${c.id} [${c.status}] ${c.title}\n  intent: ${excerpt(c.intent, 400)}\n  plan: ${excerpt(c.plan, 400)}`)
@@ -97,6 +100,9 @@ export function classifierPrompt(prompt: string, cards: CardSummary[]): string {
     : '(no cards)';
   return `Open cards:
 ${list}
+
+Pages:
+${pages.length ? pages.map((p) => `- ${p}`).join('\n') : '(none)'}
 
 Request:
 """
@@ -109,7 +115,12 @@ function strings(v: unknown): string[] {
 }
 
 /** 분류기 응답에서 JSON을 읽는다. 알 수 없는 카드 ID는 새 카드로 본다. */
-export function parseClassifierOutput(text: string | undefined, prompt: string, cards: CardSummary[]): MatchDecision | undefined {
+export function parseClassifierOutput(
+  text: string | undefined,
+  prompt: string,
+  cards: CardSummary[],
+  pages: string[] = [],
+): MatchDecision | undefined {
   if (!text) return undefined;
   const fenced = /```(?:json)?\s*\n([\s\S]*?)```/.exec(text)?.[1];
   const candidates = [fenced, text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)].filter((x): x is string => !!x);
@@ -124,6 +135,7 @@ export function parseClassifierOutput(text: string | undefined, prompt: string, 
         intent: typeof v.intent === 'string' && v.intent.trim() ? v.intent.trim() : prompt.trim(),
         spec: strings(v.spec),
         plan: strings(v.plan),
+        page: typeof v.page === 'string' && pages.includes(v.page.trim()) ? v.page.trim() : undefined,
         via: 'classifier',
       };
     } catch {
