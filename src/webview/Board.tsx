@@ -3,16 +3,16 @@ import { localDate, overdueDays } from '../core/board';
 import { formatProgress } from '../core/checklist';
 import { KANBAN_STATUSES, type Card, type Category, type KanbanStatus, type ToolId } from '../core/types';
 import type { BoardState, CardSession } from '../shared/protocol';
-import { ATTENTION, categoriesOf, elapsed, matchesFilter, placedCards, shortDate, type BoardFilter, type Placed } from './cards';
+import { ATTENTION, categoriesOf, columnCounts, elapsed, hiddenStatuses, matchesFilter, placedCards, shortDate, type BoardFilter, type Placed } from './cards';
 import { BranchIcon, LinkIcon, RunIcon, StatusIcon } from './icons';
 import { send, useT } from './vscode';
 
-type Props = { state: BoardState; filter: BoardFilter; onSelect: (dir: string) => void };
+type Props = { state: BoardState; filter: BoardFilter; onSelect: (dir: string) => void; onFilter: (f: BoardFilter) => void };
 
 /** 한 카드에 보이는 에이전트 칩 수 (DS-9) */
 const MAX_CHIPS = 3;
 
-export function Board({ state, filter, onSelect }: Props) {
+export function Board({ state, filter, onSelect, onFilter }: Props) {
   const t = useT();
   const [dropAt, setDropAt] = useState<{ status: KanbanStatus; index: number }>();
   const [dragging, setDragging] = useState<string>();
@@ -27,6 +27,12 @@ export function Board({ state, filter, onSelect }: Props) {
   const columns = Object.fromEntries(
     KANBAN_STATUSES.map((s) => [s, cards.filter((c) => c.card.status === s).sort((a, b) => a.card.order - b.card.order)]),
   ) as Record<KanbanStatus, Placed[]>;
+  const hidden = hiddenStatuses(filter, columnCounts(cards));
+  const visible = KANBAN_STATUSES.filter((s) => !hidden.has(s));
+  const showColumn = (s: KanbanStatus) =>
+    filter.hiddenColumns?.includes(s)
+      ? onFilter({ ...filter, hiddenColumns: filter.hiddenColumns.filter((x) => x !== s) })
+      : onFilter({ ...filter, autoHideEmpty: undefined });
 
   useEffect(() => {
     const id = focusAfterRender.current;
@@ -78,8 +84,8 @@ export function Board({ state, filter, onSelect }: Props) {
   };
 
   return (
-    <div className="board">
-      {KANBAN_STATUSES.map((status) => (
+    <div className="board" style={{ gridTemplateColumns: `repeat(${visible.length}, minmax(180px, 1fr))${' 32px'.repeat(hidden.size)}` }}>
+      {visible.map((status) => (
         <section
           key={status}
           className="column"
@@ -144,6 +150,30 @@ export function Board({ state, filter, onSelect }: Props) {
             {status === 'todo' && <NewCard />}
           </div>
         </section>
+      ))}
+      {[...hidden].map((status) => (
+        <button
+          key={status}
+          className={`column-rail${dragging ? ' dragging' : ''}${dropAt?.status === status ? ' over' : ''}`}
+          title={t('column.show', { name: t(`status.${status}`) })}
+          onClick={() => showColumn(status)}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDropAt({ status, index: columns[status].length });
+          }}
+          onDragLeave={() => setDropAt(undefined)}
+          onDrop={(e) => {
+            e.preventDefault();
+            const id = e.dataTransfer.getData('text/plain');
+            setDropAt(undefined);
+            setDragging(undefined);
+            if (id) moveTo(id, status, columns[status].filter((c) => c.card.id !== id).length);
+          }}
+        >
+          <StatusIcon status={status} />
+          <span className="rail-label">{dragging ? t('column.dropHere', { name: t(`status.${status}`) }) : t(`status.${status}`)}</span>
+          <span className="count">{columns[status].length}</span>
+        </button>
       ))}
     </div>
   );
