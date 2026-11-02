@@ -101,6 +101,31 @@ export interface BoardState {
   machine: MachineSettings;
   /** 카드를 판별하지 못한 세션 (E-8) */
   unlinkedSessions: { tool: ToolId; sessionId: string; cwd: string }[];
+  rules: RulesState;
+}
+
+/**
+ * 도구별 규칙 파일 상태.
+ * ok: 규칙과 같다. edited: 보드가 만든 파일을 누가 고쳤다. unmanaged: 보드가 만들지 않은 같은 이름 파일이 있다.
+ */
+export type RuleFileState = 'ok' | 'edited' | 'unmanaged';
+
+export interface RuleFileView {
+  path: string;
+  tool: ToolId;
+  scope: string;
+  ruleIds: string[];
+  state: RuleFileState;
+  /** 보드가 만들 내용 */
+  content: string;
+}
+
+export interface RulesState {
+  files: RuleFileView[];
+  /** 아직 규칙으로 가져오지 않은 CLAUDE.md·AGENTS.md·.cursor/rules 파일 */
+  importable: string[];
+  /** 같은 폴더에서 본문이 거의 같은 규칙 쌍 */
+  duplicates: [string, string][];
 }
 
 export interface CardPatch {
@@ -139,6 +164,14 @@ export type ToExtension =
   | { type: 'relinkSharedDoc'; id: string }
   | { type: 'removeSharedDoc'; id: string }
   | { type: 'createDocTask'; id: string }
+  | { type: 'addRule' }
+  | { type: 'updateRule'; id: string; tools?: ToolId[]; scope?: string }
+  | { type: 'removeRule'; id: string }
+  | { type: 'importRules' }
+  | { type: 'mergeRules'; keep: string; drop: string }
+  | { type: 'overwriteRuleFile'; path: string }
+  | { type: 'compareRuleFile'; path: string }
+  | { type: 'openRuleFile'; path: string }
   | { type: 'loadRuns'; dir: string }
   | { type: 'markSeen'; dir: string }
   | { type: 'startRun'; dir: string; role: Role; resume: boolean }
