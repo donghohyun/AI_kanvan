@@ -25,7 +25,7 @@ import type { BoardAccess } from '../runner/runService';
 import { pathExists, writeFileAtomic } from '../storage/fsutil';
 import { BOARD_DIR, BoardRepository, type BoardSnapshot } from '../storage/repository';
 import { RULES_DIR, RulesSync } from '../storage/rulesSync';
-import { normalizeScope } from '../core/agentRules';
+import { normalizeScope, setSectionTools } from '../core/agentRules';
 import { translate, type Locale, type MessageKey } from '../shared/i18n';
 import type { BoardState, CardPatch, CardView, MachineSettings, RulesState, ToExtension, ToWebview } from '../shared/protocol';
 import { figuresFileFor, sharedDocKind, type CanvasController } from './canvasController';
@@ -347,6 +347,18 @@ export class BoardController implements BoardAccess, vscode.Disposable {
           const tools = msg.tools ? TOOL_IDS.filter((t) => msg.tools!.includes(t)) : doc.rule.tools;
           return mapDoc(board, msg.id, { rule: { tools, scope } });
         });
+      case 'setRuleSection': {
+        const doc = this.snapshot?.board.sharedDocs.find((d) => d.id === msg.id);
+        if (!doc?.rule) return;
+        const file = path.join(this.repo.root, doc.path);
+        const current = (await fs.readFile(file, 'utf8').catch(() => undefined)) ?? '';
+        if (current !== msg.base) {
+          void vscode.window.showWarningMessage(this.t('rules.changedOutside'));
+          return this.reload();
+        }
+        await writeFileAtomic(file, setSectionTools(current, msg.line, msg.tools ?? undefined));
+        return this.reload();
+      }
       case 'removeRule': {
         const doc = this.snapshot?.board.sharedDocs.find((d) => d.id === msg.id);
         if (!doc) return;

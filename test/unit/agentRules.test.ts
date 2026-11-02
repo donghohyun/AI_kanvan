@@ -2,7 +2,16 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CODEX_INLINE_BUDGET, isGenerated, planRuleFiles, relativePath, type RuleSource } from '../../src/core/agentRules';
+import {
+  bodyFor,
+  CODEX_INLINE_BUDGET,
+  isGenerated,
+  planRuleFiles,
+  relativePath,
+  ruleSections,
+  setSectionTools,
+  type RuleSource,
+} from '../../src/core/agentRules';
 import { defaultBoard, type BoardConfig } from '../../src/core/types';
 import { RulesSync } from '../../src/storage/rulesSync';
 
@@ -14,6 +23,43 @@ const rule = (over: Partial<RuleSource>): RuleSource => ({
   scope: '',
   body: '# Rule\n\n- do this',
   ...over,
+});
+
+describe('rule sections', () => {
+  const body = ['# Rule', 'intro', '', '## Shared', '- both', '', '## Claude', '<!-- agent-board:tools claude -->', '- claude only', '', '```', '## not a heading', '```'].join('\n');
+
+  it('splits at ## headings outside code and reads the tools mark', () => {
+    expect(ruleSections(body).map((s) => [s.title, s.line, s.tools])).toEqual([
+      ['', 0, undefined],
+      ['Shared', 3, undefined],
+      ['Claude', 6, ['claude']],
+    ]);
+  });
+
+  it('sends each tool only its sections and drops the mark', () => {
+    const files = planRuleFiles([rule({ body })]);
+    const claude = files.find((f) => f.path === 'CLAUDE.md')!.content;
+    const agents = files.find((f) => f.path === 'AGENTS.md')!.content;
+    expect(claude).toContain('- claude only');
+    expect(claude).not.toContain('agent-board:tools');
+    expect(agents).toContain('- both');
+    expect(agents).not.toContain('- claude only');
+  });
+
+  it('gives Cursor only its own sections when AGENTS.md already has the rest', () => {
+    const cursorBody = body.replace('tools claude', 'tools cursor').replace('claude only', 'cursor only');
+    const mdc = planRuleFiles([rule({ body: cursorBody })]).find((f) => f.tool === 'cursor')!.content;
+    expect(mdc).toContain('- cursor only');
+    expect(mdc).not.toContain('- both');
+  });
+
+  it('adds, changes and removes the tools mark', () => {
+    const marked = setSectionTools(body, 3, ['codex']);
+    expect(ruleSections(marked)[1]!.tools).toEqual(['codex']);
+    expect(bodyFor(marked, 'claude', ['claude', 'codex'])).not.toContain('- both');
+    expect(setSectionTools(marked, 3, undefined)).toBe(body);
+    expect(() => setSectionTools(body, 4, ['codex'])).toThrow();
+  });
 });
 
 describe('planRuleFiles', () => {

@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { TOOL_IDS, type SharedDoc, type ToolId } from '../core/types';
-import type { BoardState, RuleFileView } from '../shared/protocol';
-import { send, useT } from './vscode';
+import { ruleSections, sectionTools, type RuleSection } from '../core/agentRules';
+import type { BoardState, CanvasActionMessage, RuleFileView } from '../shared/protocol';
+import { CanvasFrame } from './canvas/runtime';
+import { ConflictBanner, EditableMarkdown } from './DocEditing';
+import { onMessage, send, useT } from './vscode';
 
 type RuleDoc = SharedDoc & { rule: NonNullable<SharedDoc['rule']> };
+const NO_STATE: Record<string, unknown> = {};
 
 /** AI 규칙: 규칙 문서 하나를 Claude·Codex·Cursor가 읽는 파일로 넘긴다. */
 export function RulesPage({ state, onBack, onOpenDoc }: { state: BoardState; onBack: () => void; onOpenDoc: (id: string) => void }) {
@@ -113,17 +117,57 @@ export function RulesPage({ state, onBack, onOpenDoc }: { state: BoardState; onB
 
 function RuleDetail({ rule, files, onOpenDoc }: { rule: RuleDoc; files: RuleFileView[]; onOpenDoc: (id: string) => void }) {
   const t = useT();
+  const source = useRuleSource(rule.id);
+  const [mode, setMode] = useState<'doc' | 'side'>('doc');
+  const host = useMemo(() => {
+    const dir = `shared:${rule.id}`;
+    return {
+      setState: (key: string, value: unknown) => send({ type: 'canvasState', dir, key, value }),
+      dispatch: (action: CanvasActionMessage) => send({ type: 'canvasAction', dir, action }),
+      openLink: (href: string) => send({ type: 'openExternal', href }),
+    };
+  }, [rule.id]);
+  return (
+    <section className="rules-main">
+      <div className="rules-content">
+        <div className="rules-head">
+          <h2>{rule.name}</h2>
+          <code>{rule.path}</code>
+          <span className="spacer" />
+          <div className="segmented" role="group">
+            {(['doc', 'side'] as const).map((m) => (
+              <button key={m} className={mode === m ? 'on' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>
+                {t(`rules.mode.${m}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="muted rules-section-hint">{t('rules.sectionHint')}</p>
+        <ConflictBanner dir={`shared:${rule.id}`} />
+        {source === undefined ? (
+          <p className="muted">{t('canvas.loading')}</p>
+        ) : (
+          <CanvasFrame state={NO_STATE} host={host}>
+            {mode === 'doc' ? <RuleDocument rule={rule} source={source} /> : <RuleSideBySide rule={rule} source={source} />}
+          </CanvasFrame>
+        )}
+      </div>
+      <aside className="rules-info">
+        <RuleSettings rule={rule} files={files} onOpenDoc={onOpenDoc} />
+      </aside>
+    </section>
+  );
+}
+
+function RuleSettings({ rule, files, onOpenDoc }: { rule: RuleDoc; files: RuleFileView[]; onOpenDoc: (id: string) => void }) {
+  const t = useT();
   const [scope, setScope] = useState(rule.rule.scope);
   const toggle = (tool: ToolId) => {
     const tools = rule.rule.tools.includes(tool) ? rule.rule.tools.filter((x) => x !== tool) : [...rule.rule.tools, tool];
     send({ type: 'updateRule', id: rule.id, tools });
   };
   return (
-    <section className="rules-main">
-      <div className="rules-head">
-        <h2>{rule.name}</h2>
-        <code>{rule.path}</code>
-      </div>
+    <>
       <div className="rules-fields">
         <span className="muted">{t('rules.tools')}</span>
         {TOOL_IDS.map((tool) => (
@@ -169,6 +213,147 @@ function RuleDetail({ rule, files, onOpenDoc }: { rule: RuleDoc; files: RuleFile
           {f.ruleIds.length > 1 && <div className="muted rule-file-how">{t('rules.sharedFile', { n: f.ruleIds.length })}</div>}
         </div>
       ))}
-    </section>
+    </>
+  );
+}
+
+function useRuleSource(id: string): string | undefined {
+  const dir = `shared:${id}`;
+  const [source, setSource] = useState<string>();
+  useEffect(() => {
+    const off = onMessage((msg) => {
+      if (msg.type === 'canvas' && msg.payload.dir === dir) setSource(msg.payload.markdown ?? '');
+    });
+    send({ type: 'loadCanvas', dir });
+    return () => {
+      off();
+      send({ type: 'unwatchCanvas', dir });
+    };
+  }, [dir]);
+  return source;
+}
+
+function SectionTools({ rule, section, source }: { rule: RuleDoc; section: RuleSection; source: string }) {
+  const t = useT();
+  const all = rule.rule.tools;
+  const on = sectionTools(section, all);
+  const label =
+    on.length === 0
+      ? t('rules.sectionNone')
+      : on.length === all.length
+        ? t('rules.sectionCommon')
+        : t('rules.sectionOnly', { tools: on.map((x) => t(`tool.${x}`)).join('·') });
+  const toggle = (tool: ToolId) => {
+    const next = all.filter((x) => (x === tool ? !on.includes(x) : on.includes(x)));
+    send({ type: 'setRuleSection', id: rule.id, line: section.line, tools: next.length === all.length ? null : next, base: source });
+  };
+  return (
+    <div className="rule-section-bar">
+      <span className={`rule-section-label${on.length === all.length ? ' common' : ''}`}>{label}</span>
+      {all.length > 1 &&
+        all.map((tool) => (
+          <button
+            key={tool}
+            className={`rule-chip${on.includes(tool) ? ' on' : ''}`}
+            aria-pressed={on.includes(tool)}
+            title={t(on.includes(tool) ? 'rules.chipOff' : 'rules.chipOn', { tool: t(`tool.${tool}`) })}
+            onClick={() => toggle(tool)}
+          >
+            {t(`tool.${tool}`)}
+          </button>
+        ))}
+    </div>
+  );
+}
+
+function SectionBody({ rule, section, source }: { rule: RuleDoc; section: RuleSection; source: string }) {
+  return <EditableMarkdown dir={`shared:${rule.id}`} target="markdown" source={source} range={[section.line, section.end]} />;
+}
+
+function RuleDocument({ rule, source }: { rule: RuleDoc; source: string }) {
+  const sections = ruleSections(source);
+  if (sections.length === 0) return <EditableMarkdown dir={`shared:${rule.id}`} target="markdown" source={source} />;
+  return (
+    <div className="rule-doc">
+      {sections.map((s) => {
+        const on = sectionTools(s, rule.rule.tools);
+        return (
+          <div key={`${s.line}:${s.title}`} className={`rule-section${on.length < rule.rule.tools.length ? ' partial' : ''}`}>
+            {s.title && <SectionTools rule={rule} section={s} source={source} />}
+            <SectionBody rule={rule} section={s} source={source} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 도구를 열로 놓고, 여러 도구에 들어가는 절은 그 열들을 가로질러 한 칸으로 보여 준다. */
+function RuleSideBySide({ rule, source }: { rule: RuleDoc; source: string }) {
+  const t = useT();
+  const tools = rule.rule.tools;
+  if (tools.length === 0) return <p className="muted">{t('rules.noFiles')}</p>;
+  const sections = ruleSections(source);
+  const cells: JSX.Element[] = [];
+  sections.forEach((s, row) => {
+    const gridRow = row + 2;
+    const key = `${s.line}:${s.title}`;
+    if (!s.title) {
+      cells.push(
+        <div key={key} className="rule-cell" style={{ gridRow, gridColumn: `1 / span ${tools.length}` }}>
+          <div className="rule-section-bar">
+            <span className="rule-section-label common">{t('rules.preamble')}</span>
+          </div>
+          <SectionBody rule={rule} section={s} source={source} />
+        </div>,
+      );
+      return;
+    }
+    const on = sectionTools(s, tools);
+    for (let c = 0; c < tools.length; ) {
+      const tool = tools[c]!;
+      if (!on.includes(tool)) {
+        cells.push(
+          <div key={`${key}:${tool}`} className="rule-cell empty" style={{ gridRow, gridColumn: c + 1 }}>
+            <span className="muted">{s.title}</span>
+            <button
+              className="link"
+              onClick={() =>
+                send({
+                  type: 'setRuleSection',
+                  id: rule.id,
+                  line: s.line,
+                  tools: on.length + 1 === tools.length ? null : tools.filter((x) => x === tool || on.includes(x)),
+                  base: source,
+                })
+              }
+            >
+              + {t('rules.addTo', { tool: t(`tool.${tool}`) })}
+            </button>
+          </div>,
+        );
+        c += 1;
+        continue;
+      }
+      let span = 1;
+      while (c + span < tools.length && on.includes(tools[c + span]!)) span += 1;
+      cells.push(
+        <div key={`${key}:${tool}`} className={`rule-cell${span > 1 ? ' shared' : ''}`} style={{ gridRow, gridColumn: `${c + 1} / span ${span}` }}>
+          <SectionTools rule={rule} section={s} source={source} />
+          <SectionBody rule={rule} section={s} source={source} />
+        </div>,
+      );
+      c += span;
+    }
+  });
+  return (
+    <div className="rule-grid" style={{ gridTemplateColumns: `repeat(${tools.length}, minmax(0, 1fr))` }}>
+      {tools.map((tool, c) => (
+        <div key={tool} className="rule-grid-head" style={{ gridRow: 1, gridColumn: c + 1 }}>
+          {t(`tool.${tool}`)}
+        </div>
+      ))}
+      {cells}
+    </div>
   );
 }

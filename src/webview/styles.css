@@ -557,7 +557,32 @@ pre.text, pre.diff {
 .rule-tools { display: flex; flex-wrap: wrap; gap: 3px; }
 .rule-tool { font-size: 0.82em; padding: 0 6px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent); }
 .rule-tool.off { opacity: 0.35; text-decoration: line-through; }
-.rules-main { padding: var(--space-4); overflow: auto; min-width: 0; }
+.rules-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); min-width: 0; min-height: 0; }
+.rules-content { padding: var(--space-4); overflow: auto; min-width: 0; }
+.rules-info { padding: var(--space-3) var(--space-4); border-left: 1px solid var(--border); overflow: auto; min-width: 0; }
+.rules-info .rules-fields { flex-direction: column; align-items: flex-start; }
+@media (max-width: 900px) {
+  .rules-main { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  .rules-content { overflow: visible; }
+  .rules-info { border-left: 0; border-top: 1px solid var(--border); }
+}
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.segmented button { border: 0; border-radius: 0; background: none; padding: 3px 10px; }
+.segmented button.on { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.rules-section-hint { font-size: 0.9em; margin: var(--space-2) 0 var(--space-3); }
+.rule-doc { display: flex; flex-direction: column; gap: var(--space-2); }
+.rule-section { border-left: 3px solid color-mix(in srgb, var(--focus) 45%, transparent); padding: 4px 0 6px 12px; }
+.rule-section.partial { border-left-color: color-mix(in srgb, var(--warn) 70%, transparent); }
+.rule-section-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 4px; }
+.rule-section-label { font-size: 0.82em; font-weight: 600; color: var(--warn); margin-right: 4px; }
+.rule-section-label.common { color: var(--focus); }
+.rule-chip { font-size: 0.8em; padding: 0 8px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: none; opacity: 0.55; }
+.rule-chip.on { opacity: 1; border-color: var(--focus); background: color-mix(in srgb, var(--focus) 18%, transparent); }
+.rule-grid { display: grid; gap: 8px; }
+.rule-grid-head { font-weight: 600; padding: 4px 8px; border-bottom: 2px solid var(--border); position: sticky; top: calc(-1 * var(--space-4)); background: var(--vscode-editor-background); z-index: 1; }
+.rule-cell { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; min-width: 0; overflow-wrap: anywhere; }
+.rule-cell.shared { border-color: color-mix(in srgb, var(--focus) 55%, transparent); background: color-mix(in srgb, var(--focus) 6%, transparent); }
+.rule-cell.empty { border-style: dashed; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; font-size: 0.9em; }
 .rules-head { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
 .rules-head h2 { margin: 0; font-size: 1.2em; }
 .rules-fields, .rules-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: var(--space-3) 0; }
