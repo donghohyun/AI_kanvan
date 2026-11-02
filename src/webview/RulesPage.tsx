@@ -93,7 +93,10 @@ export function RulesPage({ state, onBack, onOpenDoc }: { state: BoardState; onB
                   return (
                     <button key={r.id} className={`rule-row${r.id === current?.id ? ' selected' : ''}`} onClick={() => setSelected(r.id)}>
                       <span className="rule-row-title">
-                        {r.name}
+                        <span>
+                          {r.name}
+                          {r.rule.local && <span className="muted"> · {t('rules.local')}</span>}
+                        </span>
                         {st !== 'none' && <span className={`badge ${st}`}>{t(st === 'ok' ? 'rules.synced' : 'rules.check')}</span>}
                       </span>
                       <span className="rule-tools">
@@ -186,6 +189,11 @@ function RuleSettings({ rule, files, onOpenDoc }: { rule: RuleDoc; files: RuleFi
             onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           />
         </label>
+        <label className="inline" title={t('rules.localHint')}>
+          <input type="checkbox" checked={!!rule.rule.local} onChange={(e) => send({ type: 'updateRule', id: rule.id, local: e.target.checked })} />
+          {t('rules.local')}
+        </label>
+        {rule.rule.local && <span className="muted rule-file-how">{t('rules.localHint')}</span>}
       </div>
       <div className="rules-actions">
         <button className="primary" onClick={() => onOpenDoc(rule.id)}>
@@ -208,8 +216,9 @@ function RuleSettings({ rule, files, onOpenDoc }: { rule: RuleDoc; files: RuleFi
             </button>
             <span className="muted">{t(`tool.${f.tool}`)}</span>
             <span className={`badge ${f.state === 'ok' ? 'ok' : 'warn'}`}>{t(`rules.state.${f.state}`)}</span>
+            {f.local && <span className="badge">{t('rules.local')}</span>}
           </div>
-          <div className="muted rule-file-how">{t(`rules.how.${f.tool}`)}</div>
+          <div className="muted rule-file-how">{t(f.local ? `rules.howLocal.${f.tool}` : `rules.how.${f.tool}`)}</div>
           {f.ruleIds.length > 1 && <div className="muted rule-file-how">{t('rules.sharedFile', { n: f.ruleIds.length })}</div>}
         </div>
       ))}

@@ -1,5 +1,6 @@
 // AI 규칙 파일 읽기·쓰기. 보드가 만든 파일만 고치고, 사람이 고친 파일은 확인을 받는다.
 
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
@@ -71,6 +72,7 @@ export class RulesSync {
         tools: d.rule.tools,
         scope: normalizeScope(d.rule.scope),
         body: (await readTextIfExists(this.abs(d.path))) ?? '',
+        local: d.rule.local,
       })),
     );
   }
@@ -101,14 +103,19 @@ export class RulesSync {
       else if (record[f.path]) next[f.path] = record[f.path]!;
       files.push({ ...f, state });
     }
-    // 규칙에서 빠진 파일은 보드가 쓴 그대로일 때만 지운다.
+    // 규칙에서 빠진 파일은 보드가 쓴 그대로일 때만 치운다. 가져온 파일이면 원본으로 되돌린다.
     const planned = new Set(plan.map((f) => f.path));
     for (const [rel, hash] of Object.entries(record)) {
       if (planned.has(rel)) continue;
       const current = await readTextIfExists(this.abs(rel));
-      if (current !== undefined && sha(current) === hash) await fs.rm(this.abs(rel), { force: true });
+      if (current === undefined || sha(current) !== hash) continue;
+      // 팀 저장소에 올라가 있는 파일을 지우면 팀 파일 삭제가 되므로 가져오기 전 원본으로 되돌린다.
+      const original = (await this.isTracked(rel)) ? await this.importedOriginal(rel) : undefined;
+      if (original === undefined) await fs.rm(this.abs(rel), { force: true });
+      else await writeFileAtomic(this.abs(rel), original);
     }
     if (toJson(next) !== toJson(record)) await writeFileAtomic(this.recordFile, toJson(next));
+    await this.updateGitExcludes(plan, Object.keys(record));
     const duplicates: [string, string][] = [];
     sources.forEach((a, i) =>
       sources.slice(i + 1).forEach((b) => {
@@ -116,6 +123,64 @@ export class RulesSync {
       }),
     );
     return { files, importable: await this.findImportable(), duplicates };
+  }
+
+  /** 가져오기 전 원본 (가장 최근 백업) */
+  private async importedOriginal(rel: string): Promise<string | undefined> {
+    const base = path.join(this.localDir, 'backup', 'rules-import');
+    const stamps = (await fs.readdir(base).catch(() => [] as string[])).sort().reverse();
+    for (const stamp of stamps) {
+      const text = await readTextIfExists(path.join(base, stamp, ...rel.split('/')));
+      if (text !== undefined) return text;
+    }
+    return undefined;
+  }
+
+  /** 파일이 들어 있는 git 저장소의 git 폴더와 그 저장소 기준 경로. 보드 루트 밖으로는 올라가지 않는다 */
+  private async gitRepoOf(rel: string): Promise<{ gitDir: string; dir: string; rel: string } | undefined> {
+    const parts = rel.split('/').slice(0, -1);
+    for (let n = parts.length; n >= 0; n -= 1) {
+      const dir = this.abs(parts.slice(0, n).join('/'));
+      const dotGit = path.join(dir, '.git');
+      const stat = await fs.stat(dotGit).catch(() => undefined);
+      if (!stat) continue;
+      let gitDir = dotGit;
+      if (stat.isFile()) {
+        const m = /^gitdir:\s*(.+)$/m.exec(await fs.readFile(dotGit, 'utf8'));
+        if (!m) return undefined;
+        gitDir = path.resolve(dir, m[1]!.trim());
+      }
+      return { gitDir, dir, rel: rel.split('/').slice(n).join('/') };
+    }
+    return undefined;
+  }
+
+  private async isTracked(rel: string): Promise<boolean> {
+    const repo = await this.gitRepoOf(rel);
+    if (!repo) return false;
+    return new Promise((resolve) => execFile('git', ['-C', repo.dir, 'ls-files', '--error-unmatch', '--', repo.rel], (err) => resolve(!err)));
+  }
+
+  /** 개인용 규칙 파일을 각 저장소의 .git/info/exclude에 적는다. 팀 저장소에는 아무것도 남지 않는다 */
+  private async updateGitExcludes(plan: PlannedFile[], previous: string[]): Promise<void> {
+    const repos = new Map<string, string[]>();
+    for (const rel of new Set([...plan.map((f) => f.path), ...previous])) {
+      const repo = await this.gitRepoOf(rel);
+      if (!repo) continue;
+      const list = repos.get(repo.gitDir) ?? [];
+      if (plan.some((f) => f.local && f.path === rel)) list.push(`/${repo.rel}`);
+      repos.set(repo.gitDir, list);
+    }
+    const begin = '# agent-board: local AI rules';
+    const end = '# agent-board: end';
+    for (const [gitDir, paths] of repos) {
+      const file = path.join(gitDir, 'info', 'exclude');
+      const current = (await readTextIfExists(file)) ?? '';
+      const kept = current.replace(new RegExp(`${begin}\\n[\\s\\S]*?${end}\\n?`), '');
+      const block = paths.length ? `${begin}\n${paths.sort().join('\n')}\n${end}\n` : '';
+      const next = block ? `${kept ? kept.replace(/\n*$/, '\n') : ''}${block}` : kept;
+      if (next !== current) await writeFileAtomic(file, next);
+    }
   }
 
   /** 레포 루트와 바로 아래 폴더의 CLAUDE.md·AGENTS.md·.cursor/rules/*.mdc 중 보드가 만들지 않은 것 */
@@ -131,7 +196,8 @@ export class RulesSync {
       const names = ['AGENTS.md', 'CLAUDE.md', ...mdc.filter((n) => n.endsWith('.mdc')).map((n) => `.cursor/rules/${n}`)];
       for (const name of names) {
         const text = await readTextIfExists(this.abs(prefix + name));
-        if (text !== undefined && !isGenerated(text)) found.push(prefix + name);
+        // 보드에서 빼서 원본으로 되돌린 파일은 다시 가져오라고 하지 않는다.
+        if (text !== undefined && !isGenerated(text) && text !== (await this.importedOriginal(prefix + name))) found.push(prefix + name);
       }
     }
     return found;

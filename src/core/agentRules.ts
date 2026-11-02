@@ -17,6 +17,8 @@ export interface RuleSource {
   /** 적용 폴더. 빈 문자열이면 레포 전체 */
   scope: string;
   body: string;
+  /** 내 PC에만: 팀 파일 대신 개인용 파일로 넘기고 git이 무시하게 한다 */
+  local?: boolean;
 }
 
 export interface PlannedFile {
@@ -26,6 +28,8 @@ export interface PlannedFile {
   scope: string;
   ruleIds: string[];
   content: string;
+  /** 개인용 파일. 그 폴더의 git 저장소에서 무시하게 한다 */
+  local?: boolean;
 }
 
 type Locale = 'ko' | 'en';
@@ -150,42 +154,26 @@ export function planRuleFiles(rules: RuleSource[], locale: Locale = 'ko'): Plann
   const scopes = [...new Set(rules.map((r) => normalizeScope(r.scope)))];
   for (const scope of scopes) {
     const inScope = rules.filter((r) => normalizeScope(r.scope) === scope);
-    const claude = inScope.filter((r) => r.tools.includes('claude'));
-    if (claude.length) {
+    const uses = (tool: ToolId, local: boolean) => inScope.filter((r) => r.tools.includes(tool) && !!r.local === local);
+    // Claude는 CLAUDE.md 옆의 CLAUDE.local.md를 개인용으로 함께 읽는다.
+    for (const local of [false, true]) {
+      const claude = uses('claude', local);
+      if (!claude.length) continue;
       out.push({
-        path: join(scope, 'CLAUDE.md'),
+        path: join(scope, local ? 'CLAUDE.local.md' : 'CLAUDE.md'),
         tool: 'claude',
         scope,
         ruleIds: claude.map((r) => r.id),
         content: [header(locale), ...claude.map((r) => bodyFor(r.body, 'claude', r.tools))].join('\n\n') + '\n',
+        ...(local && { local }),
       });
     }
     const inlined = new Set<string>();
-    const codex = inScope.filter((r) => r.tools.includes('codex'));
-    if (codex.length) {
-      let used = 0;
-      const parts: string[] = [];
-      const links: string[] = [];
-      for (const r of codex) {
-        const text = bodyFor(r.body, 'codex', r.tools);
-        const size = new TextEncoder().encode(text).length;
-        if (used + size <= CODEX_INLINE_BUDGET) {
-          used += size;
-          inlined.add(r.id);
-          parts.push(text);
-        } else {
-          links.push(`- [${r.name}](${relativePath(scope, r.path)}): ${TEXT[locale].read}`);
-        }
-      }
-      if (links.length) parts.push([TEXT[locale].more, '', ...links].join('\n'));
-      out.push({
-        path: join(scope, 'AGENTS.md'),
-        tool: 'codex',
-        scope,
-        ruleIds: codex.map((r) => r.id),
-        content: [header(locale), ...parts].join('\n\n') + '\n',
-      });
-    }
+    const shared = uses('codex', false);
+    if (shared.length) out.push(codexFile(shared, scope, 'AGENTS.md', locale, inlined));
+    // Codex는 AGENTS.override.md가 있으면 그 폴더의 AGENTS.md 대신 읽으므로 팀 규칙도 함께 넣는다.
+    const mine = uses('codex', true);
+    if (mine.length) out.push({ ...codexFile([...shared, ...mine], scope, 'AGENTS.override.md', locale), local: true });
     // Cursor는 AGENTS.md도 읽으므로, 거기 본문이 들어간 규칙은 Cursor에만 가는 절만 따로 만든다.
     for (const r of inScope.filter((x) => x.tools.includes('cursor'))) {
       const text = inlined.has(r.id)
@@ -198,10 +186,30 @@ export function planRuleFiles(rules: RuleSource[], locale: Locale = 'ko'): Plann
         scope,
         ruleIds: [r.id],
         content: `---\ndescription: ${r.name.replace(/\n/g, ' ')}\nalwaysApply: true\n---\n${header(locale)}\n\n${text}\n`,
+        ...(r.local && { local: true }),
       });
     }
   }
   return out;
+}
+
+function codexFile(codex: RuleSource[], scope: string, name: string, locale: Locale, inlined = new Set<string>()): PlannedFile {
+  let used = 0;
+  const parts: string[] = [];
+  const links: string[] = [];
+  for (const r of codex) {
+    const text = bodyFor(r.body, 'codex', r.tools);
+    const size = new TextEncoder().encode(text).length;
+    if (used + size <= CODEX_INLINE_BUDGET) {
+      used += size;
+      inlined.add(r.id);
+      parts.push(text);
+    } else {
+      links.push(`- [${r.name}](${relativePath(scope, r.path)}): ${TEXT[locale].read}`);
+    }
+  }
+  if (links.length) parts.push([TEXT[locale].more, '', ...links].join('\n'));
+  return { path: join(scope, name), tool: 'codex', scope, ruleIds: codex.map((r) => r.id), content: [header(locale), ...parts].join('\n\n') + '\n' };
 }
 
 /** CLAUDE.md의 `@경로` 가져오기 줄과 나머지 글 */

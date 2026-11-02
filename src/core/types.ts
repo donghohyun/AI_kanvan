@@ -85,6 +85,8 @@ export interface AgentRule {
   tools: ToolId[];
   /** 레포 루트 기준 폴더. 빈 문자열이면 레포 전체 */
   scope: string;
+  /** 내 PC에만: CLAUDE.local.md 같은 개인용 파일로 넘기고 git이 무시하게 한다 */
+  local?: boolean;
 }
 
 export interface BoardSettings {

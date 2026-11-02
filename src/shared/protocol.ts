@@ -118,6 +118,8 @@ export interface RuleFileView {
   state: RuleFileState;
   /** 보드가 만들 내용 */
   content: string;
+  /** 개인용 파일 (git이 무시) */
+  local?: boolean;
 }
 
 export interface RulesState {
@@ -165,7 +167,7 @@ export type ToExtension =
   | { type: 'removeSharedDoc'; id: string }
   | { type: 'createDocTask'; id: string }
   | { type: 'addRule' }
-  | { type: 'updateRule'; id: string; tools?: ToolId[]; scope?: string }
+  | { type: 'updateRule'; id: string; tools?: ToolId[]; scope?: string; local?: boolean }
   /** 규칙의 `##` 절을 넣을 도구. null이면 규칙의 도구를 따른다. base와 파일이 다르면 고치지 않는다 */
   | { type: 'setRuleSection'; id: string; line: number; tools: ToolId[] | null; base: string }
   | { type: 'removeRule'; id: string }

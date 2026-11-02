@@ -345,7 +345,8 @@ export class BoardController implements BoardAccess, vscode.Disposable {
             return undefined;
           }
           const tools = msg.tools ? TOOL_IDS.filter((t) => msg.tools!.includes(t)) : doc.rule.tools;
-          return mapDoc(board, msg.id, { rule: { tools, scope } });
+          const local = msg.local ?? doc.rule.local;
+          return mapDoc(board, msg.id, { rule: { tools, scope, ...(local && { local }) } });
         });
       case 'setRuleSection': {
         const doc = this.snapshot?.board.sharedDocs.find((d) => d.id === msg.id);

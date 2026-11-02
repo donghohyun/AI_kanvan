@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -63,6 +64,16 @@ describe('rule sections', () => {
 });
 
 describe('planRuleFiles', () => {
+  it('writes this-PC-only rules to personal files, with team rules copied into the Codex override', () => {
+    const files = planRuleFiles([rule({}), rule({ id: 'doc-2', name: 'Mine', body: '# Mine\n\n- only me', local: true })]);
+    const byPath = Object.fromEntries(files.map((f) => [f.path, f]));
+    expect(byPath['CLAUDE.md']!.content).not.toContain('- only me');
+    expect(byPath['CLAUDE.local.md']).toMatchObject({ local: true });
+    expect(byPath['AGENTS.override.md']!.content).toContain('- do this');
+    expect(byPath['AGENTS.override.md']!.content).toContain('- only me');
+    expect(files.filter((f) => f.tool === 'cursor').map((f) => f.local)).toEqual([true]);
+  });
+
   it('writes the full text for Claude and Codex and skips Cursor when AGENTS.md already has it', () => {
     const files = planRuleFiles([rule({})]);
     expect(files.map((f) => f.path)).toEqual(['CLAUDE.md', 'AGENTS.md']);
@@ -111,6 +122,29 @@ describe('RulesSync', () => {
     await sync.removeMoved(result.moved);
     return result.board;
   }
+
+  it('moves a rule to this PC only: team file back to the original, personal file ignored by git', async () => {
+    const git = (...args: string[]) => execFileSync('git', ['-C', path.join(root, 'backend'), '-c', 'user.name=t', '-c', 'user.email=t@t', ...args]);
+    git('init', '-q');
+    git('add', 'CLAUDE.md');
+    git('commit', '-qm', 'team rules');
+    await write('backend/.git/info/exclude', '# git ls-files --others --exclude-from=.git/info/exclude\n');
+    let board = await imported();
+    const backend = board.sharedDocs.find((d) => d.rule?.scope === 'backend')!;
+    board = { ...board, sharedDocs: board.sharedDocs.map((d) => (d === backend ? { ...d, rule: { ...d.rule!, local: true } } : d)) };
+    const state = await sync.sync(board);
+
+    expect(await read('backend/CLAUDE.md')).toBe('# CLAUDE.md\n\n백엔드 구조\n');
+    expect(await read('backend/CLAUDE.local.md')).toContain('백엔드 구조');
+    expect(state.files.find((f) => f.path === 'backend/CLAUDE.local.md')?.local).toBe(true);
+    expect(await read('backend/.git/info/exclude')).toContain('# agent-board: local AI rules\n/CLAUDE.local.md\n# agent-board: end\n');
+    expect(state.importable).not.toContain('backend/CLAUDE.md');
+
+    board = { ...board, sharedDocs: board.sharedDocs.map((d) => (d.id === backend.id ? { ...d, rule: { ...d.rule!, local: undefined } } : d)) };
+    await sync.sync(board);
+    expect(await exists('backend/CLAUDE.local.md')).toBe(false);
+    expect(await read('backend/.git/info/exclude')).toBe('# git ls-files --others --exclude-from=.git/info/exclude\n');
+  });
 
   it('finds rule files the board did not make', async () => {
     expect(await sync.findImportable()).toEqual(['AGENTS.md', 'CLAUDE.md', 'backend/CLAUDE.md', 'nol/AGENTS.md', 'nol/CLAUDE.md']);
