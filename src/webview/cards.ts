@@ -1,7 +1,7 @@
 // 웹뷰에서 쓰는 카드 계산 도우미.
 
 import { cardCategories, completedAt, localDate, normalizeTags } from '../core/board';
-import type { Card, Category, RunStatus } from '../core/types';
+import { KANBAN_STATUSES, type Card, type Category, type KanbanStatus, type RunStatus } from '../core/types';
 import type { BoardState, CardView } from '../shared/protocol';
 
 export type Placed = CardView & { card: Card };
@@ -22,6 +22,22 @@ export interface BoardFilter {
   doneSince?: string;
   /** 사람이 볼 카드만 */
   attention?: boolean;
+  /** 직접 숨긴 열 */
+  hiddenColumns?: KanbanStatus[];
+  /** 카드가 없는 열을 숨긴다. 새 카드 버튼이 있는 할 일 열은 남긴다 */
+  autoHideEmpty?: boolean;
+}
+
+export function hiddenStatuses(filter: BoardFilter, counts: Record<KanbanStatus, number>): Set<KanbanStatus> {
+  return new Set(
+    KANBAN_STATUSES.filter((s) => filter.hiddenColumns?.includes(s) || (filter.autoHideEmpty && s !== 'todo' && counts[s] === 0)),
+  );
+}
+
+export function columnCounts(cards: Placed[]): Record<KanbanStatus, number> {
+  const counts = Object.fromEntries(KANBAN_STATUSES.map((s) => [s, 0])) as Record<KanbanStatus, number>;
+  for (const c of cards) if (c.card.status in counts) counts[c.card.status] += 1;
+  return counts;
 }
 
 /** 사람의 입력이나 확인이 필요한 실행 상태 */

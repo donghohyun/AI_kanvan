@@ -62,7 +62,7 @@ export function App() {
             <Summary state={state} />
             <CategoryBars state={state} />
             <Filters state={state} filter={viewState.filter} onChange={(filter) => setViewState((v) => ({ ...v, filter }))} />
-            <Board state={state} filter={viewState.filter} onSelect={openCard} />
+            <Board state={state} filter={viewState.filter} onSelect={openCard} onFilter={(filter) => setViewState((v) => ({ ...v, filter }))} />
             <SharedDocsBar state={state} onOpen={(id) => showView('shared', undefined, id)} />
           </main>
         </div>
