@@ -281,6 +281,8 @@ export class BoardController implements BoardAccess, vscode.Disposable {
       case 'init':
         await this.repo.init();
         return this.reload();
+      case 'openInBrowser':
+        return this.openInBrowser();
       case 'createCard':
         await this.createCard(msg.title);
         return this.reload();

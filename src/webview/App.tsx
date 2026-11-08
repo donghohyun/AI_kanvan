@@ -76,6 +76,10 @@ function BoardHeader({ onSettings }: { onSettings: () => void }) {
   return (
     <header className="board-header">
       <h1>Agent Board</h1>
+      <span className="spacer" />
+      {location.protocol.startsWith('vscode') && (
+        <button onClick={() => send({ type: 'openInBrowser' })}>{t('board.openInBrowser')}</button>
+      )}
       <button onClick={onSettings} aria-label={t('settings.open')}>
         <GearIcon />
         {t('settings.open')}
